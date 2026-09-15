@@ -1,0 +1,71 @@
+name: release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  plugin:
+    name: VPP ${{ matrix.vpp_tag }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - vpp_repo: "2510"
+            vpp_tag: "25.10"
+          - vpp_repo: "2606"
+            vpp_tag: "26.06"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake python3 python3-ply \
+            libnl-3-dev libnl-genl-3-dev
+
+      - name: Install VPP ${{ matrix.vpp_tag }} development packages
+        run: |
+          curl -s "https://packagecloud.io/install/repositories/fdio/${{ matrix.vpp_repo }}/script.deb.sh" \
+            | sudo bash
+          sudo apt-get install -y --no-install-recommends vpp-dev libvppinfra-dev
+          dpkg-query -W -f='vpp-dev ${Version}\n' vpp-dev
+
+      - name: Build the plugin
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          make -C build -j"$(nproc)"
+
+      - name: Name the artifact
+        id: artifact
+        run: |
+          version="${{ github.event.release.tag_name }}"
+          if [ -z "$version" ]; then
+            version="$(git describe --tags --always)"
+          fi
+          name="fastacl_plugin-${version}-vpp${{ matrix.vpp_repo }}-amd64.so"
+          cp build/lib/vpp_plugins/fastacl_plugin.so "$name"
+          sha256sum "$name" > "${name}.sha256"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: |
+            ${{ steps.artifact.outputs.name }}
+            ${{ steps.artifact.outputs.name }}.sha256
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "${{ steps.artifact.outputs.name }}" \
+            "${{ steps.artifact.outputs.name }}.sha256" --clobber
