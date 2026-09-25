@@ -19,8 +19,7 @@ rule_gen_row (fastacl_main_t *fsm)
 {
   if (fsm->rule_gen_stat_index == ~0u)
     return 0;
-  counter_t **rows =
-    vlib_stats_get_entry_data_pointer (fsm->rule_gen_stat_index);
+  counter_t **rows = vlib_stats_get_entry_data_pointer (fsm->rule_gen_stat_index);
   return (rows && vec_len (rows)) ? rows[0] : 0;
 }
 
@@ -72,8 +71,8 @@ fastacl_per_worker_rule_reset (fastacl_main_t *fsm, u32 rule_index)
 
   foreach_fastacl_per_worker (pw, fsm)
   {
-#define _(v)                                                                  \
-  if (rule_index < vec_len (pw->v))                                           \
+#define _(v)                                                                                       \
+  if (rule_index < vec_len (pw->v))                                                                \
     clib_memset (&pw->v[rule_index], 0, sizeof (pw->v[0]));
     foreach_fastacl_per_worker_rule_vec
 #undef _
@@ -81,8 +80,7 @@ fastacl_per_worker_rule_reset (fastacl_main_t *fsm, u32 rule_index)
 }
 
 static void
-fastacl_rule_counter_read (fastacl_main_t *fsm, u32 rule_index, u64 *packets,
-			   u64 *bytes)
+fastacl_rule_counter_read (fastacl_main_t *fsm, u32 rule_index, u64 *packets, u64 *bytes)
 {
   vlib_counter_t c = { 0, 0 };
 
@@ -110,8 +108,7 @@ fastacl_per_worker_clear (fastacl_main_t *fsm)
 }
 
 void
-fastacl_per_worker_rule_sample_sum (fastacl_main_t *fsm, u32 rule_index,
-				    u64 *sampled, u64 *missed)
+fastacl_per_worker_rule_sample_sum (fastacl_main_t *fsm, u32 rule_index, u64 *sampled, u64 *missed)
 {
   u64 total_sampled = 0, total_missed = 0;
 
@@ -128,9 +125,8 @@ fastacl_per_worker_rule_sample_sum (fastacl_main_t *fsm, u32 rule_index,
 }
 
 static void
-fastacl_per_worker_totals_sum (fastacl_main_t *fsm, u64 *processed,
-			       u64 *dropped, u64 *bytes_processed,
-			       u64 *bytes_dropped)
+fastacl_per_worker_totals_sum (fastacl_main_t *fsm, u64 *processed, u64 *dropped,
+			       u64 *bytes_processed, u64 *bytes_dropped)
 {
   u64 n_processed = 0, n_dropped = 0;
   u64 n_bytes_processed = 0, n_bytes_dropped = 0;
@@ -178,8 +174,7 @@ fastacl_clear_counters (void)
 }
 
 static void
-fastacl_snapshot_update (fastacl_rate_snapshot_t *snap, u64 packets, u64 bytes,
-			 f64 now)
+fastacl_snapshot_update (fastacl_rate_snapshot_t *snap, u64 packets, u64 bytes, f64 now)
 {
   f64 dt = now - snap->time;
   int rebase = packets < snap->packets || bytes < snap->bytes;
@@ -201,15 +196,13 @@ fastacl_update_aggregate_rates (vlib_main_t *vm)
   fastacl_main_t *fsm = &fastacl_main;
   f64 now = vlib_time_now (vm);
 
-  fastacl_per_worker_totals_sum (
-    fsm, &fsm->counters.total_processed, &fsm->counters.total_dropped,
-    &fsm->counters.total_bytes_processed, &fsm->counters.total_bytes_dropped);
+  fastacl_per_worker_totals_sum (fsm, &fsm->counters.total_processed, &fsm->counters.total_dropped,
+				 &fsm->counters.total_bytes_processed,
+				 &fsm->counters.total_bytes_dropped);
 
-  fastacl_snapshot_update (&fsm->counters.processed_rate,
-			   fsm->counters.total_processed,
+  fastacl_snapshot_update (&fsm->counters.processed_rate, fsm->counters.total_processed,
 			   fsm->counters.total_bytes_processed, now);
-  fastacl_snapshot_update (&fsm->counters.dropped_rate,
-			   fsm->counters.total_dropped,
+  fastacl_snapshot_update (&fsm->counters.dropped_rate, fsm->counters.total_dropped,
 			   fsm->counters.total_bytes_dropped, now);
 }
 
@@ -224,9 +217,7 @@ fastacl_update_rates (vlib_main_t *vm)
 
   pool_foreach (rule, fsm->rules)
     {
-      fastacl_rule_counter_read (fsm, rule->index, &rule->packet_count,
-				 &rule->byte_count);
-      fastacl_snapshot_update (&rule->rate_snap, rule->packet_count,
-			       rule->byte_count, now);
+      fastacl_rule_counter_read (fsm, rule->index, &rule->packet_count, &rule->byte_count);
+      fastacl_snapshot_update (&rule->rate_snap, rule->packet_count, rule->byte_count, now);
     }
 }

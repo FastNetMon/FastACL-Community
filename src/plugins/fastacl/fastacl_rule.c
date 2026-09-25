@@ -12,22 +12,18 @@ fastacl_match_valid (const fastacl_match_t *m)
 {
   u8 max_plen = fastacl_max_prefix_len (m->flags & FASTACL_MATCH_IS_IP6);
 
-  if (((m->flags & FASTACL_MATCH_DST_PREFIX) &&
-       m->dst_prefix_len > max_plen) ||
+  if (((m->flags & FASTACL_MATCH_DST_PREFIX) && m->dst_prefix_len > max_plen) ||
       ((m->flags & FASTACL_MATCH_SRC_PREFIX) && m->src_prefix_len > max_plen))
     return 0;
-  if ((m->flags & FASTACL_MATCH_FRAGMENT) && m->fragment_mask == 0 &&
-      m->fragment_flags == 0)
+  if ((m->flags & FASTACL_MATCH_FRAGMENT) && m->fragment_mask == 0 && m->fragment_flags == 0)
     return 0;
   return 1;
 }
 
 int
-fastacl_rule_check (const fastacl_match_t *match,
-		    const fastacl_action_t *action)
+fastacl_rule_check (const fastacl_match_t *match, const fastacl_action_t *action)
 {
-  if (action->type != FASTACL_ACTION_TYPE_DROP &&
-      action->type != FASTACL_ACTION_TYPE_PERMIT)
+  if (action->type != FASTACL_ACTION_TYPE_DROP && action->type != FASTACL_ACTION_TYPE_PERMIT)
     return VNET_API_ERROR_INVALID_VALUE;
 
   if (!fastacl_match_valid (match))
@@ -37,8 +33,7 @@ fastacl_rule_check (const fastacl_match_t *match,
 }
 
 static u32
-fastacl_rule_alloc (fastacl_main_t *fsm, u32 order,
-		    const fastacl_match_t *match,
+fastacl_rule_alloc (fastacl_main_t *fsm, u32 order, const fastacl_match_t *match,
 		    const fastacl_action_t *action)
 {
   fastacl_rule_t *rule;
@@ -59,8 +54,8 @@ fastacl_rule_alloc (fastacl_main_t *fsm, u32 order,
 }
 
 int
-fastacl_rule_add (u32 order, const fastacl_match_t *match,
-		  const fastacl_action_t *action, u32 *rule_index_out)
+fastacl_rule_add (u32 order, const fastacl_match_t *match, const fastacl_action_t *action,
+		  u32 *rule_index_out)
 {
   fastacl_main_t *fsm = &fastacl_main;
   u32 rule_index;
@@ -78,8 +73,7 @@ fastacl_rule_add (u32 order, const fastacl_match_t *match,
   if (rule_index_out)
     *rule_index_out = rule_index;
 
-  vlib_log_info (fsm->log_class, "rule add: index=%u order=%u", rule_index,
-		 order);
+  vlib_log_info (fsm->log_class, "rule add: index=%u order=%u", rule_index, order);
 
   return 0;
 }
@@ -100,8 +94,7 @@ fastacl_rule_add_batch (const u32 *orders, const fastacl_match_t *matches,
   fsm->tss_bulk_mode = 0;
   fastacl_tss_finalize (fsm);
 
-  vlib_log_info (fsm->log_class, "rule add batch: %u of %u added", n_added,
-		 count);
+  vlib_log_info (fsm->log_class, "rule add batch: %u of %u added", n_added, count);
 
   return n_added;
 }

@@ -34,8 +34,8 @@ fastacl_ip6_prefix_match (u32 flags, u32 want_flag, const ip6_address_t *pkt,
     return 1;
   ASSERT (plen <= 128);
 
-  return ip6_unaligned_destination_matches_route (
-    &ip6_main, (ip6_address_t *) pkt, (ip6_address_t *) rule, plen);
+  return ip6_unaligned_destination_matches_route (&ip6_main, (ip6_address_t *) pkt,
+						  (ip6_address_t *) rule, plen);
 }
 
 static_always_inline void
@@ -49,14 +49,12 @@ fastacl_ip6_apply_mask (const ip6_address_t *addr, u8 plen, u64 *hi, u64 *lo)
 }
 
 static_always_inline int
-fastacl_match_fields (fastacl_match_t *m, u8 pkt_proto, u16 l4_src_port,
-		      u16 l4_dst_port, u8 *l4, u16 l4_bytes, u16 pkt_len,
-		      u8 pkt_dscp, u8 pkt_frag_flags)
+fastacl_match_fields (fastacl_match_t *m, u8 pkt_proto, u16 l4_src_port, u16 l4_dst_port, u8 *l4,
+		      u16 l4_bytes, u16 pkt_len, u8 pkt_dscp, u8 pkt_frag_flags)
 {
   if ((m->flags & FASTACL_MATCH_PROTO) && pkt_proto != m->proto)
     return 0;
-  if (m->flags & (FASTACL_MATCH_DST_PORT | FASTACL_MATCH_SRC_PORT |
-		  FASTACL_MATCH_EITHER_PORT))
+  if (m->flags & (FASTACL_MATCH_DST_PORT | FASTACL_MATCH_SRC_PORT | FASTACL_MATCH_EITHER_PORT))
     {
       if ((pkt_proto != IP_PROTOCOL_TCP && pkt_proto != IP_PROTOCOL_UDP) ||
 	  l4_bytes < FASTACL_L4_PORTS_BYTES)
@@ -70,29 +68,24 @@ fastacl_match_fields (fastacl_match_t *m, u8 pkt_proto, u16 l4_src_port,
     return 0;
   if (m->flags & FASTACL_MATCH_EITHER_PORT)
     {
-      int src_in = (l4_src_port >= m->either_port_min &&
-		    l4_src_port <= m->either_port_max);
-      int dst_in = (l4_dst_port >= m->either_port_min &&
-		    l4_dst_port <= m->either_port_max);
+      int src_in = (l4_src_port >= m->either_port_min && l4_src_port <= m->either_port_max);
+      int dst_in = (l4_dst_port >= m->either_port_min && l4_dst_port <= m->either_port_max);
       if (!src_in && !dst_in)
 	return 0;
     }
   if (m->flags & (FASTACL_MATCH_ICMP_TYPE | FASTACL_MATCH_ICMP_CODE))
     {
-      if ((pkt_proto != IP_PROTOCOL_ICMP && pkt_proto != IP_PROTOCOL_ICMP6) ||
-	  !l4)
+      if ((pkt_proto != IP_PROTOCOL_ICMP && pkt_proto != IP_PROTOCOL_ICMP6) || !l4)
 	return 0;
       icmp46_header_t *icmp = (icmp46_header_t *) l4;
       if (m->flags & FASTACL_MATCH_ICMP_TYPE)
 	{
-	  if (l4_bytes < FASTACL_L4_ICMP_TYPE_BYTES ||
-	      icmp->type != m->icmp_type)
+	  if (l4_bytes < FASTACL_L4_ICMP_TYPE_BYTES || icmp->type != m->icmp_type)
 	    return 0;
 	}
       if (m->flags & FASTACL_MATCH_ICMP_CODE)
 	{
-	  if (l4_bytes < FASTACL_L4_ICMP_CODE_BYTES ||
-	      icmp->code != m->icmp_code)
+	  if (l4_bytes < FASTACL_L4_ICMP_CODE_BYTES || icmp->code != m->icmp_code)
 	    return 0;
 	}
     }
@@ -102,12 +95,10 @@ fastacl_match_fields (fastacl_match_t *m, u8 pkt_proto, u16 l4_src_port,
 	return 0;
       if (!l4 || l4_bytes < FASTACL_L4_TCP_FLAGS_BYTES)
 	return 0;
-      if ((((tcp_header_t *) l4)->flags & m->tcp_flags_mask) !=
-	  m->tcp_flags_value)
+      if ((((tcp_header_t *) l4)->flags & m->tcp_flags_mask) != m->tcp_flags_value)
 	return 0;
     }
-  if ((m->flags & FASTACL_MATCH_PKT_LEN) &&
-      (pkt_len < m->pkt_len_min || pkt_len > m->pkt_len_max))
+  if ((m->flags & FASTACL_MATCH_PKT_LEN) && (pkt_len < m->pkt_len_min || pkt_len > m->pkt_len_max))
     return 0;
   if ((m->flags & FASTACL_MATCH_DSCP) && pkt_dscp != m->dscp)
     return 0;

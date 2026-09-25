@@ -9,11 +9,9 @@
 #include <vnet/vnet.h>
 #include <vnet/feature/feature.h>
 
-extern int vnet_l2_feature_enable_disable (const char *arc_name,
-					   const char *node_name,
+extern int vnet_l2_feature_enable_disable (const char *arc_name, const char *node_name,
 					   u32 sw_if_index, int enable_disable,
-					   void *feature_config,
-					   u32 n_feature_config_bytes);
+					   void *feature_config, u32 n_feature_config_bytes);
 
 fastacl_main_t fastacl_main;
 
@@ -29,17 +27,14 @@ fastacl_config (vlib_main_t *vm, unformat_input_t *input)
       if (unformat (input, "tss-bihash-buckets %u", &buckets_val))
 	fsm->tss_buckets = clib_max (buckets_val, FASTACL_TSS_BUCKETS_MIN);
       else if (unformat (input, "tss-bihash-memory-mb %u", &memory_mb_val))
-	vlib_log_warn (
-	  fsm->log_class,
-	  "tss-bihash-memory-mb is accepted for configuration "
-	  "compatibility and has no effect: the classifier tables "
-	  "allocate from the VPP main heap");
+	vlib_log_warn (fsm->log_class, "tss-bihash-memory-mb is accepted for configuration "
+				       "compatibility and has no effect: the classifier tables "
+				       "allocate from the VPP main heap");
       else if (unformat_skip_white_space (input) &&
 	       unformat_check_input (input) == UNFORMAT_END_OF_INPUT)
 	break;
       else
-	return clib_error_return (0, "unknown input '%U'",
-				  format_unformat_error, input);
+	return clib_error_return (0, "unknown input '%U'", format_unformat_error, input);
     }
 
   return 0;
@@ -54,8 +49,7 @@ fastacl_init (vlib_main_t *vm)
   fsm->vlib_main = vm;
   fsm->vnet_main = vnet_get_main ();
 
-  fsm->tuple_by_mask =
-    hash_create_mem (0, sizeof (fastacl_tuple_mask_t), sizeof (uword));
+  fsm->tuple_by_mask = hash_create_mem (0, sizeof (fastacl_tuple_mask_t), sizeof (uword));
 
   fsm->tss_buckets = FASTACL_TSS_BUCKETS_DEFAULT;
   fsm->rule_stats_enabled = 1;
@@ -80,8 +74,7 @@ fastacl_counters_main_loop_enter (vlib_main_t *vm)
   if (fsm->rule_counter_len == 0)
     fsm->rule_counter_len = 1;
 
-  fsm->rule_gen_stat_index =
-    vlib_stats_add_counter_vector ("/fastacl/rule/gen");
+  fsm->rule_gen_stat_index = vlib_stats_add_counter_vector ("/fastacl/rule/gen");
   if (fsm->rule_gen_stat_index != ~0u)
     {
       vlib_stats_validate (fsm->rule_gen_stat_index, 0, 0);
@@ -97,10 +90,7 @@ static void
 fastacl_psample_close_all (fastacl_main_t *fsm)
 {
   fsm->psample_enabled = 0;
-  foreach_fastacl_per_worker (pw, fsm)
-  {
-    fastacl_psample_worker_close (&pw->psample);
-  }
+  foreach_fastacl_per_worker (pw, fsm) { fastacl_psample_worker_close (&pw->psample); }
 }
 
 static int
@@ -171,11 +161,11 @@ fastacl_arc_enable_disable (u32 i, u32 sw_if_index, int enable_disable)
 {
   if (fastacl_filter_arcs[i].is_l2)
     return vnet_l2_feature_enable_disable (fastacl_filter_arcs[i].arc_name,
-					   fastacl_filter_arcs[i].node_name,
-					   sw_if_index, enable_disable, 0, 0);
+					   fastacl_filter_arcs[i].node_name, sw_if_index,
+					   enable_disable, 0, 0);
   return vnet_feature_enable_disable (fastacl_filter_arcs[i].arc_name,
-				      fastacl_filter_arcs[i].node_name,
-				      sw_if_index, enable_disable, 0, 0);
+				      fastacl_filter_arcs[i].node_name, sw_if_index, enable_disable,
+				      0, 0);
 }
 
 VLIB_PLUGIN_REGISTER () = {
@@ -184,8 +174,7 @@ VLIB_PLUGIN_REGISTER () = {
 };
 
 static int
-fastacl_interface_apply_arcs (fastacl_main_t *fsm, u32 sw_if_index,
-			      int enable_disable)
+fastacl_interface_apply_arcs (fastacl_main_t *fsm, u32 sw_if_index, int enable_disable)
 {
   u32 i;
   int rv = 0;
@@ -201,8 +190,7 @@ fastacl_interface_apply_arcs (fastacl_main_t *fsm, u32 sw_if_index,
       return rv;
     }
 
-  fsm->enabled_interfaces =
-    clib_bitmap_set (fsm->enabled_interfaces, sw_if_index, enable_disable);
+  fsm->enabled_interfaces = clib_bitmap_set (fsm->enabled_interfaces, sw_if_index, enable_disable);
 
   return 0;
 }
@@ -212,8 +200,7 @@ fastacl_interface_enable_disable (u32 sw_if_index, int enable_disable)
 {
   fastacl_main_t *fsm = &fastacl_main;
 
-  if (!!clib_bitmap_get (fsm->enabled_interfaces, sw_if_index) ==
-      !!enable_disable)
+  if (!!clib_bitmap_get (fsm->enabled_interfaces, sw_if_index) == !!enable_disable)
     return 0;
 
   return fastacl_interface_apply_arcs (fsm, sw_if_index, enable_disable);

@@ -15,8 +15,7 @@
 #include <vlibapi/api_helper_macros.h>
 
 static void
-fastacl_api_match_decode (const vl_api_fastacl_match_t *in,
-			  fastacl_match_t *out)
+fastacl_api_match_decode (const vl_api_fastacl_match_t *in, fastacl_match_t *out)
 {
   clib_memset (out, 0, sizeof (*out));
   out->flags = in->flags;
@@ -33,11 +32,9 @@ fastacl_api_match_decode (const vl_api_fastacl_match_t *in,
 }
 
 static void
-fastacl_api_match_encode (const fastacl_match_t *in,
-			  vl_api_fastacl_match_t *out)
+fastacl_api_match_encode (const fastacl_match_t *in, vl_api_fastacl_match_t *out)
 {
-  ip46_type_t type =
-    (in->flags & FASTACL_MATCH_IS_IP6) ? IP46_TYPE_IP6 : IP46_TYPE_IP4;
+  ip46_type_t type = (in->flags & FASTACL_MATCH_IS_IP6) ? IP46_TYPE_IP6 : IP46_TYPE_IP4;
 
   clib_memset (out, 0, sizeof (*out));
   out->flags = in->flags;
@@ -54,8 +51,7 @@ fastacl_api_match_encode (const fastacl_match_t *in,
 }
 
 static void
-fastacl_api_action_decode (const vl_api_fastacl_action_t *in,
-			   fastacl_action_t *out)
+fastacl_api_action_decode (const vl_api_fastacl_action_t *in, fastacl_action_t *out)
 {
   clib_memset (out, 0, sizeof (*out));
 #define _(f) out->f = in->f;
@@ -64,8 +60,7 @@ fastacl_api_action_decode (const vl_api_fastacl_action_t *in,
 }
 
 static void
-fastacl_api_action_encode (const fastacl_action_t *in,
-			   vl_api_fastacl_action_t *out)
+fastacl_api_action_encode (const fastacl_action_t *in, vl_api_fastacl_action_t *out)
 {
 #define _(f) out->f = in->f;
   foreach_fastacl_action_field
@@ -73,8 +68,7 @@ fastacl_api_action_encode (const fastacl_action_t *in,
 }
 
 static void
-vl_api_fastacl_interface_enable_disable_t_handler (
-  vl_api_fastacl_interface_enable_disable_t *mp)
+vl_api_fastacl_interface_enable_disable_t_handler (vl_api_fastacl_interface_enable_disable_t *mp)
 {
   vl_api_fastacl_interface_enable_disable_reply_t *rmp;
   int rv = 0;
@@ -82,8 +76,7 @@ vl_api_fastacl_interface_enable_disable_t_handler (
   if (!vnet_sw_if_index_is_api_valid (mp->sw_if_index))
     rv = VNET_API_ERROR_INVALID_SW_IF_INDEX;
   else
-    rv =
-      fastacl_interface_enable_disable (mp->sw_if_index, mp->enable_disable);
+    rv = fastacl_interface_enable_disable (mp->sw_if_index, mp->enable_disable);
 
   REPLY_MACRO_END (VL_API_FASTACL_INTERFACE_ENABLE_DISABLE_REPLY);
 }
@@ -112,9 +105,8 @@ vl_api_fastacl_rule_add_t_handler (vl_api_fastacl_rule_add_t *mp)
 }
 
 static int
-fastacl_api_batch_decode (vl_api_fastacl_rule_add_batch_t *mp, u32 count,
-			  u32 **orders, fastacl_match_t **matches,
-			  fastacl_action_t **actions)
+fastacl_api_batch_decode (vl_api_fastacl_rule_add_batch_t *mp, u32 count, u32 **orders,
+			  fastacl_match_t **matches, fastacl_action_t **actions)
 {
   for (u32 i = 0; i < count; i++)
     {
@@ -154,10 +146,9 @@ vl_api_fastacl_rule_add_batch_t_handler (vl_api_fastacl_rule_add_batch_t *mp)
   fastacl_match_t *matches = 0;
   fastacl_action_t *actions = 0;
 
-  int rv =
-    fastacl_api_batch_count_fits (mp, count) ?
-      fastacl_api_batch_decode (mp, count, &orders, &matches, &actions) :
-      VNET_API_ERROR_INVALID_VALUE;
+  int rv = fastacl_api_batch_count_fits (mp, count) ?
+	     fastacl_api_batch_decode (mp, count, &orders, &matches, &actions) :
+	     VNET_API_ERROR_INVALID_VALUE;
 
   if (!rv)
     n_added = fastacl_rule_add_batch (orders, matches, actions, count);
@@ -166,8 +157,7 @@ vl_api_fastacl_rule_add_batch_t_handler (vl_api_fastacl_rule_add_batch_t *mp)
   vec_free (matches);
   vec_free (actions);
 
-  REPLY_MACRO2_END (VL_API_FASTACL_RULE_ADD_BATCH_REPLY,
-		    ({ rmp->n_added = n_added; }));
+  REPLY_MACRO2_END (VL_API_FASTACL_RULE_ADD_BATCH_REPLY, ({ rmp->n_added = n_added; }));
 }
 
 static void
@@ -200,27 +190,26 @@ vl_api_fastacl_rule_dump_t_handler (vl_api_fastacl_rule_dump_t *mp)
     {
       vl_api_fastacl_rule_details_t *rmp;
       rmp = vl_msg_api_alloc (sizeof (*rmp));
-      REPLY_MACRO_DETAILS4_END (
-	VL_API_FASTACL_RULE_DETAILS, reg, context, ({
-	  rmp->rule_index = rule->index;
-	  rmp->order = rule->order;
-	  rmp->packet_count = rule->packet_count;
-	  rmp->byte_count = rule->byte_count;
-	  rmp->pps = rule->rate_snap.pps;
-	  rmp->l3_bps = rule->rate_snap.l3_bps;
-	  rmp->l1_bps = rule->rate_snap.l1_bps;
+      REPLY_MACRO_DETAILS4_END (VL_API_FASTACL_RULE_DETAILS, reg, context, ({
+				  rmp->rule_index = rule->index;
+				  rmp->order = rule->order;
+				  rmp->packet_count = rule->packet_count;
+				  rmp->byte_count = rule->byte_count;
+				  rmp->pps = rule->rate_snap.pps;
+				  rmp->l3_bps = rule->rate_snap.l3_bps;
+				  rmp->l1_bps = rule->rate_snap.l1_bps;
 
-	  fastacl_api_match_encode (&rule->match, &rmp->match);
-	  fastacl_api_action_encode (&rule->action, &rmp->action);
+				  fastacl_api_match_encode (&rule->match, &rmp->match);
+				  fastacl_api_action_encode (&rule->action, &rmp->action);
 
-	  u64 sampled, missed;
-	  fastacl_per_worker_rule_sample_sum (fsm, rule->index, &sampled,
-					      &missed);
-	  rmp->sample_count = sampled;
-	  rmp->sample_missed = missed;
+				  u64 sampled, missed;
+				  fastacl_per_worker_rule_sample_sum (fsm, rule->index, &sampled,
+								      &missed);
+				  rmp->sample_count = sampled;
+				  rmp->sample_missed = missed;
 
-	  rmp->generation = fastacl_rule_gen_get (fsm, rule->index);
-	}));
+				  rmp->generation = fastacl_rule_gen_get (fsm, rule->index);
+				}));
     }
 }
 
@@ -253,10 +242,8 @@ vl_api_fastacl_counters_get_t_handler (vl_api_fastacl_counters_get_t *mp)
     }
 
   REPLY_MACRO2_END (VL_API_FASTACL_COUNTERS_GET_REPLY, ({
-		      rmp->total_bytes_processed =
-			fsm->counters.total_bytes_processed;
-		      rmp->total_bytes_dropped =
-			fsm->counters.total_bytes_dropped;
+		      rmp->total_bytes_processed = fsm->counters.total_bytes_processed;
+		      rmp->total_bytes_dropped = fsm->counters.total_bytes_dropped;
 		      rmp->total_processed = fsm->counters.total_processed;
 		      rmp->total_dropped = fsm->counters.total_dropped;
 		      rmp->total_pps = fsm->counters.processed_rate.pps;

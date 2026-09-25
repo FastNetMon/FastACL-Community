@@ -75,13 +75,12 @@ int fastacl_psample_init (void);
 int fastacl_psample_enable_disable (int enable);
 int fastacl_psample_worker_open (fastacl_psample_worker_t *w);
 void fastacl_psample_worker_close (fastacl_psample_worker_t *w);
-int fastacl_psample_send (fastacl_psample_worker_t *w, u32 group, u32 rate,
-			  u32 iifindex, u32 origsize, const u8 *data, u32 len);
+int fastacl_psample_send (fastacl_psample_worker_t *w, u32 group, u32 rate, u32 iifindex,
+			  u32 origsize, const u8 *data, u32 len);
 
-int fastacl_rule_check (const fastacl_match_t *match,
-			const fastacl_action_t *action);
-int fastacl_rule_add (u32 order, const fastacl_match_t *match,
-		      const fastacl_action_t *action, u32 *rule_index_out);
+int fastacl_rule_check (const fastacl_match_t *match, const fastacl_action_t *action);
+int fastacl_rule_add (u32 order, const fastacl_match_t *match, const fastacl_action_t *action,
+		      u32 *rule_index_out);
 u32 fastacl_rule_add_batch (const u32 *orders, const fastacl_match_t *matches,
 			    const fastacl_action_t *actions, u32 count);
 int fastacl_rule_del (u32 rule_index);
@@ -90,17 +89,15 @@ void fastacl_clear_counters (void);
 void fastacl_update_rates (vlib_main_t *vm);
 void fastacl_update_aggregate_rates (vlib_main_t *vm);
 
-#define foreach_fastacl_per_worker(pw, fsm)                                   \
-  for (fastacl_per_worker_t * (pw) = (fsm)->per_worker;                       \
-       (pw) < vec_end ((fsm)->per_worker); (pw)++)
+#define foreach_fastacl_per_worker(pw, fsm)                                                        \
+  for (fastacl_per_worker_t * (pw) = (fsm)->per_worker; (pw) < vec_end ((fsm)->per_worker); (pw)++)
 
-void fastacl_per_worker_rule_vecs_validate (fastacl_main_t *fsm,
-					    u32 max_index);
+void fastacl_per_worker_rule_vecs_validate (fastacl_main_t *fsm, u32 max_index);
 void fastacl_per_worker_rule_reset (fastacl_main_t *fsm, u32 rule_index);
 void fastacl_rule_gen_bump (fastacl_main_t *fsm, u32 rule_index);
 u64 fastacl_rule_gen_get (fastacl_main_t *fsm, u32 rule_index);
-void fastacl_per_worker_rule_sample_sum (fastacl_main_t *fsm, u32 rule_index,
-					 u64 *sampled, u64 *missed);
+void fastacl_per_worker_rule_sample_sum (fastacl_main_t *fsm, u32 rule_index, u64 *sampled,
+					 u64 *missed);
 
 int fastacl_interface_enable_disable (u32 sw_if_index, int enable_disable);
 

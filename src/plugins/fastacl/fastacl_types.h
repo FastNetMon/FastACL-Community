@@ -12,19 +12,19 @@
 
 typedef struct fastacl_main_t_ fastacl_main_t;
 
-#define foreach_fastacl_match_flag                                            \
-  _ (0, DST_PREFIX, "dst-prefix")                                             \
-  _ (1, SRC_PREFIX, "src-prefix")                                             \
-  _ (2, PROTO, "proto")                                                       \
-  _ (3, DST_PORT, "dst-port")                                                 \
-  _ (4, SRC_PORT, "src-port")                                                 \
-  _ (5, EITHER_PORT, "either-port")                                           \
-  _ (6, ICMP_TYPE, "icmp-type")                                               \
-  _ (7, ICMP_CODE, "icmp-code")                                               \
-  _ (8, TCP_FLAGS, "tcp-flags")                                               \
-  _ (9, PKT_LEN, "pkt-len")                                                   \
-  _ (10, DSCP, "dscp")                                                        \
-  _ (11, FRAGMENT, "fragment")                                                \
+#define foreach_fastacl_match_flag                                                                 \
+  _ (0, DST_PREFIX, "dst-prefix")                                                                  \
+  _ (1, SRC_PREFIX, "src-prefix")                                                                  \
+  _ (2, PROTO, "proto")                                                                            \
+  _ (3, DST_PORT, "dst-port")                                                                      \
+  _ (4, SRC_PORT, "src-port")                                                                      \
+  _ (5, EITHER_PORT, "either-port")                                                                \
+  _ (6, ICMP_TYPE, "icmp-type")                                                                    \
+  _ (7, ICMP_CODE, "icmp-code")                                                                    \
+  _ (8, TCP_FLAGS, "tcp-flags")                                                                    \
+  _ (9, PKT_LEN, "pkt-len")                                                                        \
+  _ (10, DSCP, "dscp")                                                                             \
+  _ (11, FRAGMENT, "fragment")                                                                     \
   _ (15, IS_IP6, "is-ip6")
 
 typedef enum
@@ -78,22 +78,22 @@ typedef struct
   u8 fragment_mask;
 } fastacl_match_t;
 
-#define foreach_fastacl_match_scalar_field                                    \
-  _ (u8, proto)                                                               \
-  _ (u16, dst_port_min)                                                       \
-  _ (u16, dst_port_max)                                                       \
-  _ (u16, src_port_min)                                                       \
-  _ (u16, src_port_max)                                                       \
-  _ (u16, either_port_min)                                                    \
-  _ (u16, either_port_max)                                                    \
-  _ (u8, icmp_type)                                                           \
-  _ (u8, icmp_code)                                                           \
-  _ (u8, tcp_flags_value)                                                     \
-  _ (u8, tcp_flags_mask)                                                      \
-  _ (u16, pkt_len_min)                                                        \
-  _ (u16, pkt_len_max)                                                        \
-  _ (u8, dscp)                                                                \
-  _ (u8, fragment_flags)                                                      \
+#define foreach_fastacl_match_scalar_field                                                         \
+  _ (u8, proto)                                                                                    \
+  _ (u16, dst_port_min)                                                                            \
+  _ (u16, dst_port_max)                                                                            \
+  _ (u16, src_port_min)                                                                            \
+  _ (u16, src_port_max)                                                                            \
+  _ (u16, either_port_min)                                                                         \
+  _ (u16, either_port_max)                                                                         \
+  _ (u8, icmp_type)                                                                                \
+  _ (u8, icmp_code)                                                                                \
+  _ (u8, tcp_flags_value)                                                                          \
+  _ (u8, tcp_flags_mask)                                                                           \
+  _ (u16, pkt_len_min)                                                                             \
+  _ (u16, pkt_len_max)                                                                             \
+  _ (u8, dscp)                                                                                     \
+  _ (u8, fragment_flags)                                                                           \
   _ (u8, fragment_mask)
 
 static_always_inline u8
@@ -137,9 +137,9 @@ typedef struct
   u32 sample_group;
 } fastacl_action_t;
 
-#define foreach_fastacl_action_field                                          \
-  _ (type)                                                                    \
-  _ (sample_ratio)                                                            \
+#define foreach_fastacl_action_field                                                               \
+  _ (type)                                                                                         \
+  _ (sample_ratio)                                                                                 \
   _ (sample_group)
 
 typedef struct
@@ -168,9 +168,9 @@ typedef struct fastacl_rule_t_
 
 #define FASTACL_L1_OVERHEAD_BYTES 38
 
-#define foreach_fastacl_per_worker_rule_vec                                   \
-  _ (rule_sample_count)                                                       \
-  _ (rule_sample_missed)                                                      \
+#define foreach_fastacl_per_worker_rule_vec                                                        \
+  _ (rule_sample_count)                                                                            \
+  _ (rule_sample_missed)                                                                           \
   _ (rule_sample_credit)
 
 typedef struct
@@ -219,12 +219,12 @@ typedef struct
   u8 pkt_frag_flags;
 } fastacl_parsed_t;
 
-#define foreach_fastacl_error                                                 \
-  _ (MATCHED, "packets matched a rule")                                       \
-  _ (DROPPED, "packets dropped")                                              \
-  _ (PASSED, "packets passed (no match)")                                     \
-  _ (UNPARSEABLE, "packets passed (IP version not 4 or 6)")                   \
-  _ (SAMPLED, "packets sampled to psample")                                   \
+#define foreach_fastacl_error                                                                      \
+  _ (MATCHED, "packets matched a rule")                                                            \
+  _ (DROPPED, "packets dropped")                                                                   \
+  _ (PASSED, "packets passed (no match)")                                                          \
+  _ (UNPARSEABLE, "packets passed (IP version not 4 or 6)")                                        \
+  _ (SAMPLED, "packets sampled to psample")                                                        \
   _ (SAMPLE_FAIL, "sample sends that failed (netlink backpressure)")
 
 typedef enum

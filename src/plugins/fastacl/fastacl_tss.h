@@ -12,13 +12,12 @@
 #include <vppinfra/bihash_template.h>
 #include <fastacl/fastacl_types.h>
 
-#define FASTACL_MATCH_ADDR_BITS                                               \
-  (FASTACL_MATCH_DST_PREFIX | FASTACL_MATCH_SRC_PREFIX)
+#define FASTACL_MATCH_ADDR_BITS (FASTACL_MATCH_DST_PREFIX | FASTACL_MATCH_SRC_PREFIX)
 
-#define FASTACL_TSS_MASK_FLAGS_BITS                                           \
-  (FASTACL_MATCH_DST_PREFIX | FASTACL_MATCH_SRC_PREFIX |                      \
-   FASTACL_MATCH_PROTO | FASTACL_MATCH_DST_PORT | FASTACL_MATCH_SRC_PORT |    \
-   FASTACL_MATCH_EITHER_PORT | FASTACL_MATCH_IS_IP6)
+#define FASTACL_TSS_MASK_FLAGS_BITS                                                                \
+  (FASTACL_MATCH_DST_PREFIX | FASTACL_MATCH_SRC_PREFIX | FASTACL_MATCH_PROTO |                     \
+   FASTACL_MATCH_DST_PORT | FASTACL_MATCH_SRC_PORT | FASTACL_MATCH_EITHER_PORT |                   \
+   FASTACL_MATCH_IS_IP6)
 
 typedef struct
 {
@@ -47,8 +46,7 @@ typedef struct
 } fastacl_tss_best_t;
 
 static_always_inline void
-fastacl_tss_best_take (fastacl_tss_best_t *best, u32 ri, fastacl_rule_t *rule,
-		       u8 action)
+fastacl_tss_best_take (fastacl_tss_best_t *best, u32 ri, fastacl_rule_t *rule, u8 action)
 {
   best->ri = ri;
   best->rule = rule;
@@ -60,10 +58,10 @@ typedef struct
   u32 *rule_indices;
 } fastacl_chain_t;
 
-#define foreach_fastacl_tss_width                                             \
-  _ (8_8, 8, hash4c)                                                          \
-  _ (16_8, 16, hash6c)                                                        \
-  _ (24_8, 24, hash4)                                                         \
+#define foreach_fastacl_tss_width                                                                  \
+  _ (8_8, 8, hash4c)                                                                               \
+  _ (16_8, 16, hash6c)                                                                             \
+  _ (24_8, 24, hash4)                                                                              \
   _ (40_8, 40, hash6)
 
 typedef enum
@@ -97,17 +95,17 @@ typedef union
   clib_bihash_kv_40_8_t kv6;
 } fastacl_tss_key_t;
 
-#define fastacl_tss_bihash_init(sz, hp, name_, nbuckets_)                     \
-  do                                                                          \
-    {                                                                         \
-      clib_bihash_init2_args_##sz##_t _a = {                                  \
-	.h = (hp),                                                            \
-	.name = (name_),                                                      \
-	.nbuckets = (nbuckets_),                                              \
-	.dont_add_to_all_bihash_list = 1,                                     \
-      };                                                                      \
-      clib_bihash_init2_##sz (&_a);                                           \
-    }                                                                         \
+#define fastacl_tss_bihash_init(sz, hp, name_, nbuckets_)                                          \
+  do                                                                                               \
+    {                                                                                              \
+      clib_bihash_init2_args_##sz##_t _a = {                                                       \
+	.h = (hp),                                                                                 \
+	.name = (name_),                                                                           \
+	.nbuckets = (nbuckets_),                                                                   \
+	.dont_add_to_all_bihash_list = 1,                                                          \
+      };                                                                                           \
+      clib_bihash_init2_##sz (&_a);                                                                \
+    }                                                                                              \
   while (0)
 
 static_always_inline const char *
@@ -115,8 +113,8 @@ fastacl_tss_width_name (u8 width)
 {
   switch (width)
     {
-#define _(sz, bytes, field)                                                   \
-  case FASTACL_TSS_W_##sz:                                                    \
+#define _(sz, bytes, field)                                                                        \
+  case FASTACL_TSS_W_##sz:                                                                         \
     return #bytes "B";
       foreach_fastacl_tss_width
 #undef _
@@ -124,80 +122,77 @@ fastacl_tss_width_name (u8 width)
   return "?";
 }
 
-#define fastacl_tss_bihash_ops(sz)                                            \
-  static_always_inline int tss_search_##sz (                                  \
-    clib_bihash_##sz##_t *h, clib_bihash_kv_##sz##_t *kv, u64 *value_out)     \
-  {                                                                           \
-    clib_bihash_kv_##sz##_t r;                                                \
-    if (clib_bihash_search_##sz (h, kv, &r) != 0)                             \
-      return -1;                                                              \
-    *value_out = r.value;                                                     \
-    return 0;                                                                 \
-  }                                                                           \
-  static_always_inline void tss_store_##sz (                                  \
-    clib_bihash_##sz##_t *h, clib_bihash_kv_##sz##_t *kv, u64 value)          \
-  {                                                                           \
-    kv->value = value;                                                        \
-    clib_bihash_add_del_##sz (h, kv, 1);                                      \
-  }                                                                           \
-  static_always_inline void tss_del_##sz (clib_bihash_##sz##_t *h,            \
-					  clib_bihash_kv_##sz##_t *kv)        \
-  {                                                                           \
-    clib_bihash_add_del_##sz (h, kv, 0);                                      \
-  }                                                                           \
-  static_always_inline void tss_prefetch_##sz (clib_bihash_##sz##_t *h,       \
-					       clib_bihash_kv_##sz##_t *kv)   \
-  {                                                                           \
-    clib_bihash_prefetch_bucket_##sz (h, clib_bihash_hash_##sz (kv));         \
+#define fastacl_tss_bihash_ops(sz)                                                                 \
+  static_always_inline int tss_search_##sz (clib_bihash_##sz##_t *h, clib_bihash_kv_##sz##_t *kv,  \
+					    u64 *value_out)                                        \
+  {                                                                                                \
+    clib_bihash_kv_##sz##_t r;                                                                     \
+    if (clib_bihash_search_##sz (h, kv, &r) != 0)                                                  \
+      return -1;                                                                                   \
+    *value_out = r.value;                                                                          \
+    return 0;                                                                                      \
+  }                                                                                                \
+  static_always_inline void tss_store_##sz (clib_bihash_##sz##_t *h, clib_bihash_kv_##sz##_t *kv,  \
+					    u64 value)                                             \
+  {                                                                                                \
+    kv->value = value;                                                                             \
+    clib_bihash_add_del_##sz (h, kv, 1);                                                           \
+  }                                                                                                \
+  static_always_inline void tss_del_##sz (clib_bihash_##sz##_t *h, clib_bihash_kv_##sz##_t *kv)    \
+  {                                                                                                \
+    clib_bihash_add_del_##sz (h, kv, 0);                                                           \
+  }                                                                                                \
+  static_always_inline void tss_prefetch_##sz (clib_bihash_##sz##_t *h,                            \
+					       clib_bihash_kv_##sz##_t *kv)                        \
+  {                                                                                                \
+    clib_bihash_prefetch_bucket_##sz (h, clib_bihash_hash_##sz (kv));                              \
   }
 
-#define foreach_fastacl_tss_family                                            \
-  _ (4, 8_8, 24_8, hash4c, hash4, tss4_compact_kv)                            \
+#define foreach_fastacl_tss_family                                                                 \
+  _ (4, 8_8, 24_8, hash4c, hash4, tss4_compact_kv)                                                 \
   _ (6, 16_8, 40_8, hash6c, hash6, tss6_compact_kv)
 
-#define fastacl_tss_family_ops(f, csz, wsz, cfield, wfield, conv)             \
-  static_always_inline int tss##f##_search (                                  \
-    fastacl_tuple_t *t, clib_bihash_kv_##wsz##_t *kv, u64 *value_out)         \
-  {                                                                           \
-    if (t->width == FASTACL_TSS_W_##csz)                                      \
-      {                                                                       \
-	clib_bihash_kv_##csz##_t k = conv (kv, 0);                            \
-	return tss_search_##csz (&t->cfield, &k, value_out);                  \
-      }                                                                       \
-    return tss_search_##wsz (&t->wfield, kv, value_out);                      \
-  }                                                                           \
-  static_always_inline void tss##f##_store (                                  \
-    fastacl_tuple_t *t, clib_bihash_kv_##wsz##_t *kv, u64 value)              \
-  {                                                                           \
-    if (t->width == FASTACL_TSS_W_##csz)                                      \
-      {                                                                       \
-	clib_bihash_kv_##csz##_t k = conv (kv, 0);                            \
-	tss_store_##csz (&t->cfield, &k, value);                              \
-	return;                                                               \
-      }                                                                       \
-    tss_store_##wsz (&t->wfield, kv, value);                                  \
-  }                                                                           \
-  static_always_inline void tss##f##_del (fastacl_tuple_t *t,                 \
-					  clib_bihash_kv_##wsz##_t *kv)       \
-  {                                                                           \
-    if (t->width == FASTACL_TSS_W_##csz)                                      \
-      {                                                                       \
-	clib_bihash_kv_##csz##_t k = conv (kv, 0);                            \
-	tss_del_##csz (&t->cfield, &k);                                       \
-	return;                                                               \
-      }                                                                       \
-    tss_del_##wsz (&t->wfield, kv);                                           \
-  }                                                                           \
-  static_always_inline void tss##f##_prefetch (fastacl_tuple_t *t,            \
-					       clib_bihash_kv_##wsz##_t *kv)  \
-  {                                                                           \
-    if (t->width == FASTACL_TSS_W_##csz)                                      \
-      {                                                                       \
-	clib_bihash_kv_##csz##_t k = conv (kv, 0);                            \
-	tss_prefetch_##csz (&t->cfield, &k);                                  \
-	return;                                                               \
-      }                                                                       \
-    tss_prefetch_##wsz (&t->wfield, kv);                                      \
+#define fastacl_tss_family_ops(f, csz, wsz, cfield, wfield, conv)                                  \
+  static_always_inline int tss##f##_search (fastacl_tuple_t *t, clib_bihash_kv_##wsz##_t *kv,      \
+					    u64 *value_out)                                        \
+  {                                                                                                \
+    if (t->width == FASTACL_TSS_W_##csz)                                                           \
+      {                                                                                            \
+	clib_bihash_kv_##csz##_t k = conv (kv, 0);                                                 \
+	return tss_search_##csz (&t->cfield, &k, value_out);                                       \
+      }                                                                                            \
+    return tss_search_##wsz (&t->wfield, kv, value_out);                                           \
+  }                                                                                                \
+  static_always_inline void tss##f##_store (fastacl_tuple_t *t, clib_bihash_kv_##wsz##_t *kv,      \
+					    u64 value)                                             \
+  {                                                                                                \
+    if (t->width == FASTACL_TSS_W_##csz)                                                           \
+      {                                                                                            \
+	clib_bihash_kv_##csz##_t k = conv (kv, 0);                                                 \
+	tss_store_##csz (&t->cfield, &k, value);                                                   \
+	return;                                                                                    \
+      }                                                                                            \
+    tss_store_##wsz (&t->wfield, kv, value);                                                       \
+  }                                                                                                \
+  static_always_inline void tss##f##_del (fastacl_tuple_t *t, clib_bihash_kv_##wsz##_t *kv)        \
+  {                                                                                                \
+    if (t->width == FASTACL_TSS_W_##csz)                                                           \
+      {                                                                                            \
+	clib_bihash_kv_##csz##_t k = conv (kv, 0);                                                 \
+	tss_del_##csz (&t->cfield, &k);                                                            \
+	return;                                                                                    \
+      }                                                                                            \
+    tss_del_##wsz (&t->wfield, kv);                                                                \
+  }                                                                                                \
+  static_always_inline void tss##f##_prefetch (fastacl_tuple_t *t, clib_bihash_kv_##wsz##_t *kv)   \
+  {                                                                                                \
+    if (t->width == FASTACL_TSS_W_##csz)                                                           \
+      {                                                                                            \
+	clib_bihash_kv_##csz##_t k = conv (kv, 0);                                                 \
+	tss_prefetch_##csz (&t->cfield, &k);                                                       \
+	return;                                                                                    \
+      }                                                                                            \
+    tss_prefetch_##wsz (&t->wfield, kv);                                                           \
   }
 
 #define FASTACL_VAL_CHAIN_BIT (1ull << 63)
@@ -206,8 +201,7 @@ fastacl_tss_width_name (u8 width)
 #define FASTACL_VAL_ACTION_SHIFT 60
 #define FASTACL_VAL_ACTION_MASK	 (3ull << FASTACL_VAL_ACTION_SHIFT)
 
-STATIC_ASSERT (FASTACL_ACTION_TYPE_PERMIT <= 3,
-	       "action type must fit the 2-bit TSS value field");
+STATIC_ASSERT (FASTACL_ACTION_TYPE_PERMIT <= 3, "action type must fit the 2-bit TSS value field");
 
 static_always_inline int
 fastacl_val_is_chain (u64 v)
@@ -270,23 +264,17 @@ fastacl_u32_vec_remove_value (u32 **pv, u32 value)
 void fastacl_tss_clear (fastacl_main_t *fsm);
 void fastacl_tss_insert_rule (fastacl_main_t *fsm, u32 rule_index);
 void fastacl_tss_finalize (fastacl_main_t *fsm);
-void fastacl_tuple_chain_stats (fastacl_main_t *fsm, const fastacl_tuple_t *t,
-				u32 *n_chains, u32 *max_depth,
-				u32 *n_chained_rules);
-int fastacl_tss_rule_exists (fastacl_main_t *fsm, u32 order,
-			     const fastacl_match_t *match);
+void fastacl_tuple_chain_stats (fastacl_main_t *fsm, const fastacl_tuple_t *t, u32 *n_chains,
+				u32 *max_depth, u32 *n_chained_rules);
+int fastacl_tss_rule_exists (fastacl_main_t *fsm, u32 order, const fastacl_match_t *match);
 void fastacl_tss_remove_rule (fastacl_main_t *fsm, u32 rule_index);
-u32 fastacl_tss_lookup_ip4 (fastacl_main_t *fsm, ip4_header_t *ip,
-			    u8 pkt_proto, u16 l4_src_port, u16 l4_dst_port,
-			    u8 *l4, u16 l4_bytes, u16 pkt_len, u8 pkt_dscp,
+u32 fastacl_tss_lookup_ip4 (fastacl_main_t *fsm, ip4_header_t *ip, u8 pkt_proto, u16 l4_src_port,
+			    u16 l4_dst_port, u8 *l4, u16 l4_bytes, u16 pkt_len, u8 pkt_dscp,
 			    u8 pkt_frag_flags, u8 *action_out);
-void fastacl_tss_prefetch_ip4 (fastacl_main_t *fsm, ip4_header_t *ip,
-			       u8 pkt_proto, u16 pkt_len);
-void fastacl_tss_prefetch_ip6 (fastacl_main_t *fsm, ip6_header_t *ip6,
-			       u8 pkt_proto);
-u32 fastacl_tss_lookup_ip6 (fastacl_main_t *fsm, ip6_header_t *ip6,
-			    u8 pkt_proto, u16 l4_src_port, u16 l4_dst_port,
-			    u8 *l4, u16 l4_bytes, u16 pkt_len, u8 pkt_dscp,
+void fastacl_tss_prefetch_ip4 (fastacl_main_t *fsm, ip4_header_t *ip, u8 pkt_proto, u16 pkt_len);
+void fastacl_tss_prefetch_ip6 (fastacl_main_t *fsm, ip6_header_t *ip6, u8 pkt_proto);
+u32 fastacl_tss_lookup_ip6 (fastacl_main_t *fsm, ip6_header_t *ip6, u8 pkt_proto, u16 l4_src_port,
+			    u16 l4_dst_port, u8 *l4, u16 l4_bytes, u16 pkt_len, u8 pkt_dscp,
 			    u8 pkt_frag_flags, u8 *action_out);
 
 #endif

@@ -39,4 +39,4 @@ vpp_plugin_find_library(fastacl LIBNL3_GENL_LIB libnl-genl-3.so)
 include_directories(${LIBNL3_INCLUDE_DIR}/libnl3)
 target_link_libraries(fastacl_plugin ${LIBNL3_LIB} ${LIBNL3_GENL_LIB})
 
-target_compile_options(fastacl_plugin PRIVATE -O2 -fomit-frame-pointer)
+target_compile_options(fastacl_plugin PRIVATE -O2 -fomit-frame-pointer -Werror)

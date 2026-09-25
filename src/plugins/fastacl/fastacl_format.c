@@ -95,8 +95,7 @@ format_fastacl_prefix (u8 *s, va_list *args)
   int is_dst = flag == FASTACL_MATCH_DST_PREFIX;
   ip46_address_t *a = is_dst ? &m->dst_addr : &m->src_addr;
   u8 plen = is_dst ? m->dst_prefix_len : m->src_prefix_len;
-  ip46_type_t type =
-    (m->flags & FASTACL_MATCH_IS_IP6) ? IP46_TYPE_IP6 : IP46_TYPE_IP4;
+  ip46_type_t type = (m->flags & FASTACL_MATCH_IS_IP6) ? IP46_TYPE_IP6 : IP46_TYPE_IP4;
 
   if (!(m->flags & flag))
     return format (s, "*");
@@ -125,8 +124,7 @@ static u8 *
 format_fastacl_fragment (u8 *s, fastacl_match_t *m)
 {
   if (m->fragment_mask && m->fragment_mask != m->fragment_flags)
-    return format (s, "frag=0x%02x/0x%02x ", m->fragment_flags,
-		   m->fragment_mask);
+    return format (s, "frag=0x%02x/0x%02x ", m->fragment_flags, m->fragment_mask);
   return format (s, "frag=0x%02x ", m->fragment_flags);
 }
 
@@ -167,11 +165,8 @@ fastacl_show_one_rule (vlib_main_t *vm, fastacl_rule_t *rule)
   vlib_cli_output (vm,
 		   "%-8u %-8u %-20U %-20U %-8U %-32U %-12s %-12llu "
 		   "%-12llu %U",
-		   rule->index, rule->order, format_fastacl_prefix, m,
-		   FASTACL_MATCH_DST_PREFIX, format_fastacl_prefix, m,
-		   FASTACL_MATCH_SRC_PREFIX, format_fastacl_proto, m,
-		   format_fastacl_match_extra, m,
-		   fastacl_action_type_name (rule->action.type),
-		   rule->packet_count, rule->byte_count, format_fastacl_rates,
-		   &rule->rate_snap);
+		   rule->index, rule->order, format_fastacl_prefix, m, FASTACL_MATCH_DST_PREFIX,
+		   format_fastacl_prefix, m, FASTACL_MATCH_SRC_PREFIX, format_fastacl_proto, m,
+		   format_fastacl_match_extra, m, fastacl_action_type_name (rule->action.type),
+		   rule->packet_count, rule->byte_count, format_fastacl_rates, &rule->rate_snap);
 }

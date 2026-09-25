@@ -23,6 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # clang-format 19 with a 100-column limit, the same combination fd.io
+      # gerrit enforces on VPP master, so this tree can go upstream unchanged.
+      - name: Check coding style
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-format-19
+          find src -name '*.c' -o -name '*.h' \
+            | xargs clang-format-19 --dry-run --Werror
+
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq

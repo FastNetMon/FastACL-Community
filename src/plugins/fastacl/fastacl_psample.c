@@ -24,8 +24,7 @@ fa_nl_resolve_psample (u16 *family_id, u32 *group_id)
   if (family < 0)
     goto done;
 
-  int group =
-    genl_ctrl_resolve_grp (sk, FASTACL_PSAMPLE_FAMILY, FASTACL_PSAMPLE_GROUP);
+  int group = genl_ctrl_resolve_grp (sk, FASTACL_PSAMPLE_FAMILY, FASTACL_PSAMPLE_GROUP);
   if (group < 0 || group > FASTACL_NL_MAX_MCAST_GROUP)
     goto done;
 
@@ -92,11 +91,10 @@ fastacl_psample_worker_close (fastacl_psample_worker_t *w)
 }
 
 int
-fastacl_psample_send (fastacl_psample_worker_t *w, u32 group, u32 rate,
-		      u32 iifindex, u32 origsize, const u8 *data, u32 len)
+fastacl_psample_send (fastacl_psample_worker_t *w, u32 group, u32 rate, u32 iifindex, u32 origsize,
+		      const u8 *data, u32 len)
 {
-  struct sockaddr_nl dst = { .nl_family = AF_NETLINK,
-			     .nl_groups = (1u << (w->group_id - 1)) };
+  struct sockaddr_nl dst = { .nl_family = AF_NETLINK, .nl_groups = (1u << (w->group_id - 1)) };
   struct nl_msg *msg = nlmsg_alloc ();
   int rv = -1;
 
@@ -104,8 +102,8 @@ fastacl_psample_send (fastacl_psample_worker_t *w, u32 group, u32 rate,
     return -1;
   nlmsg_set_dst (msg, &dst);
 
-  if (!genlmsg_put (msg, NL_AUTO_PORT, NL_AUTO_SEQ, w->family_id, 0, 0,
-		    PSAMPLE_CMD_SAMPLE, PSAMPLE_GENL_VERSION))
+  if (!genlmsg_put (msg, NL_AUTO_PORT, NL_AUTO_SEQ, w->family_id, 0, 0, PSAMPLE_CMD_SAMPLE,
+		    PSAMPLE_GENL_VERSION))
     goto done;
   if (nla_put_u32 (msg, PSAMPLE_ATTR_IIFINDEX, iifindex) ||
       nla_put_u32 (msg, PSAMPLE_ATTR_SAMPLE_RATE, rate) ||

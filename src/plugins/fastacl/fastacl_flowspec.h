@@ -8,8 +8,8 @@
 #include <fastacl/fastacl_types.h>
 
 static_always_inline int
-fastacl_fs_prefix_cmp (const ip46_address_t *aa, u8 apl,
-		       const ip46_address_t *ba, u8 bpl, int is_ip6)
+fastacl_fs_prefix_cmp (const ip46_address_t *aa, u8 apl, const ip46_address_t *ba, u8 bpl,
+		       int is_ip6)
 {
   u8 common = clib_min (apl, bpl);
   int cmp = 0;
@@ -68,54 +68,44 @@ fastacl_flowspec_cmp (const fastacl_match_t *a, const fastacl_match_t *b)
   if (a6 != b6)
     return a6 ? 1 : -1;
 
-#define COMPONENT(BIT, CMPEXPR)                                               \
-  do                                                                          \
-    {                                                                         \
-      int _c = fastacl_fs_presence_cmp (fa, fb, (BIT));                       \
-      if (!_c && (fa & (BIT)))                                                \
-	_c = (CMPEXPR);                                                       \
-      if (_c)                                                                 \
-	return _c;                                                            \
-    }                                                                         \
+#define COMPONENT(BIT, CMPEXPR)                                                                    \
+  do                                                                                               \
+    {                                                                                              \
+      int _c = fastacl_fs_presence_cmp (fa, fb, (BIT));                                            \
+      if (!_c && (fa & (BIT)))                                                                     \
+	_c = (CMPEXPR);                                                                            \
+      if (_c)                                                                                      \
+	return _c;                                                                                 \
+    }                                                                                              \
   while (0)
 
-  COMPONENT (FASTACL_MATCH_DST_PREFIX,
-	     fastacl_fs_prefix_cmp (&a->dst_addr, a->dst_prefix_len,
-				    &b->dst_addr, b->dst_prefix_len, a6));
-  COMPONENT (FASTACL_MATCH_SRC_PREFIX,
-	     fastacl_fs_prefix_cmp (&a->src_addr, a->src_prefix_len,
-				    &b->src_addr, b->src_prefix_len, a6));
+  COMPONENT (FASTACL_MATCH_DST_PREFIX, fastacl_fs_prefix_cmp (&a->dst_addr, a->dst_prefix_len,
+							      &b->dst_addr, b->dst_prefix_len, a6));
+  COMPONENT (FASTACL_MATCH_SRC_PREFIX, fastacl_fs_prefix_cmp (&a->src_addr, a->src_prefix_len,
+							      &b->src_addr, b->src_prefix_len, a6));
   COMPONENT (FASTACL_MATCH_PROTO, fastacl_fs_u32_cmp (a->proto, b->proto));
   COMPONENT (FASTACL_MATCH_EITHER_PORT,
-	     fastacl_fs_pair_cmp (a->either_port_min, a->either_port_max,
-				  b->either_port_min, b->either_port_max));
-  COMPONENT (FASTACL_MATCH_DST_PORT,
-	     fastacl_fs_pair_cmp (a->dst_port_min, a->dst_port_max,
-				  b->dst_port_min, b->dst_port_max));
-  COMPONENT (FASTACL_MATCH_SRC_PORT,
-	     fastacl_fs_pair_cmp (a->src_port_min, a->src_port_max,
-				  b->src_port_min, b->src_port_max));
-  COMPONENT (FASTACL_MATCH_ICMP_TYPE,
-	     fastacl_fs_u32_cmp (a->icmp_type, b->icmp_type));
-  COMPONENT (FASTACL_MATCH_ICMP_CODE,
-	     fastacl_fs_u32_cmp (a->icmp_code, b->icmp_code));
-  COMPONENT (FASTACL_MATCH_TCP_FLAGS,
-	     fastacl_fs_pair_cmp (a->tcp_flags_value, a->tcp_flags_mask,
-				  b->tcp_flags_value, b->tcp_flags_mask));
+	     fastacl_fs_pair_cmp (a->either_port_min, a->either_port_max, b->either_port_min,
+				  b->either_port_max));
+  COMPONENT (FASTACL_MATCH_DST_PORT, fastacl_fs_pair_cmp (a->dst_port_min, a->dst_port_max,
+							  b->dst_port_min, b->dst_port_max));
+  COMPONENT (FASTACL_MATCH_SRC_PORT, fastacl_fs_pair_cmp (a->src_port_min, a->src_port_max,
+							  b->src_port_min, b->src_port_max));
+  COMPONENT (FASTACL_MATCH_ICMP_TYPE, fastacl_fs_u32_cmp (a->icmp_type, b->icmp_type));
+  COMPONENT (FASTACL_MATCH_ICMP_CODE, fastacl_fs_u32_cmp (a->icmp_code, b->icmp_code));
+  COMPONENT (FASTACL_MATCH_TCP_FLAGS, fastacl_fs_pair_cmp (a->tcp_flags_value, a->tcp_flags_mask,
+							   b->tcp_flags_value, b->tcp_flags_mask));
   COMPONENT (FASTACL_MATCH_PKT_LEN,
-	     fastacl_fs_pair_cmp (a->pkt_len_min, a->pkt_len_max,
-				  b->pkt_len_min, b->pkt_len_max));
+	     fastacl_fs_pair_cmp (a->pkt_len_min, a->pkt_len_max, b->pkt_len_min, b->pkt_len_max));
   COMPONENT (FASTACL_MATCH_DSCP, fastacl_fs_u32_cmp (a->dscp, b->dscp));
-  COMPONENT (FASTACL_MATCH_FRAGMENT,
-	     fastacl_fs_pair_cmp (a->fragment_flags, a->fragment_mask,
-				  b->fragment_flags, b->fragment_mask));
+  COMPONENT (FASTACL_MATCH_FRAGMENT, fastacl_fs_pair_cmp (a->fragment_flags, a->fragment_mask,
+							  b->fragment_flags, b->fragment_mask));
 #undef COMPONENT
   return 0;
 }
 
 static_always_inline int
-fastacl_rule_precedence_cmp (const fastacl_rule_t *ra, u32 ai,
-			     const fastacl_rule_t *rb, u32 bi)
+fastacl_rule_precedence_cmp (const fastacl_rule_t *ra, u32 ai, const fastacl_rule_t *rb, u32 bi)
 {
   int c = fastacl_fs_u32_cmp (ra->order, rb->order);
   if (c)
@@ -127,8 +117,8 @@ fastacl_rule_precedence_cmp (const fastacl_rule_t *ra, u32 ai,
 }
 
 static_always_inline int
-fastacl_rule_outranks (const fastacl_rule_t *cand, u32 cand_ri,
-		       const fastacl_rule_t *best, u32 best_ri)
+fastacl_rule_outranks (const fastacl_rule_t *cand, u32 cand_ri, const fastacl_rule_t *best,
+		       u32 best_ri)
 {
   if (best_ri == ~0u)
     return 1;

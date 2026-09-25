@@ -207,7 +207,7 @@ one worker.
 CLI configuration
 _________________
 
-The mutating commands are a debug convenience. They are not synchronised
+The mutating commands are a debug convenience. They are not synchronized
 against the worker threads, so using them while traffic is running can corrupt
 the classifier; each prints a warning when workers are configured. The binary
 API is the control plane -- VPP dispatches its handlers under the worker
