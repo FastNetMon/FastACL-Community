@@ -41,7 +41,7 @@ static_always_inline u8
 fastacl_compute_frag_flags (int mf, u16 frag_off)
 {
   u8 flags = 0;
-  if (mf || frag_off)
+  if (frag_off)
     flags |= FASTACL_FRAG_ISF;
   if (mf && !frag_off)
     flags |= FASTACL_FRAG_FF;
@@ -138,7 +138,7 @@ fastacl_record_trace (vlib_main_t *vm, vlib_node_runtime_t *node, vlib_buffer_t 
 }
 
 static_always_inline void
-fastacl_parse_ip4 (fastacl_parsed_t *p, ip4_header_t *ip4, u16 avail)
+fastacl_parse_ip4 (fastacl_parsed_t *p, ip4_header_t *ip4, u16 avail, u32 chain_avail)
 {
   u16 frag_off = ip4_get_fragment_offset (ip4);
   int mf = !!ip4_get_fragment_more (ip4);
@@ -149,6 +149,7 @@ fastacl_parse_ip4 (fastacl_parsed_t *p, ip4_header_t *ip4, u16 avail)
 
   p->pkt_proto = ip4->protocol;
   p->pkt_len = clib_min (claimed, avail);
+  p->ip_len = (u16) clib_min ((u32) claimed, chain_avail);
   p->pkt_dscp = ip4_header_get_dscp (ip4);
   p->pkt_frag_flags = fastacl_compute_frag_flags (mf, frag_off);
   if (df)
@@ -160,7 +161,8 @@ fastacl_parse_ip4 (fastacl_parsed_t *p, ip4_header_t *ip4, u16 avail)
 }
 
 static_always_inline void
-fastacl_parse_ip6 (fastacl_parsed_t *p, vlib_buffer_t *b, ip6_header_t *ip6, u16 avail)
+fastacl_parse_ip6 (fastacl_parsed_t *p, vlib_buffer_t *b, ip6_header_t *ip6, u16 avail,
+		   u32 chain_avail)
 {
   ip6_ext_hdr_chain_t chain;
   u16 claimed = clib_net_to_host_u16 (ip6->payload_length) + (u16) sizeof (ip6_header_t);
@@ -168,6 +170,7 @@ fastacl_parse_ip6 (fastacl_parsed_t *p, vlib_buffer_t *b, ip6_header_t *ip6, u16
   p->is_ip6 = 1;
   p->pkt_dscp = ip6_dscp_network_order (ip6);
   p->pkt_len = clib_min (claimed, avail);
+  p->ip_len = (u16) clib_min ((u32) claimed, chain_avail);
   p->pkt_proto = ip6->protocol;
 
   int last = ip6_ext_header_walk (b, ip6, IP_PROTOCOL_IPV6_FRAGMENTATION, &chain);
@@ -183,7 +186,7 @@ fastacl_parse_ip6 (fastacl_parsed_t *p, vlib_buffer_t *b, ip6_header_t *ip6, u16
 
       if (frag_off != 0)
 	{
-	  p->pkt_proto = IP_PROTOCOL_IPV6_FRAGMENTATION;
+	  p->pkt_proto = fh->next_hdr;
 	  return;
 	}
     }
@@ -196,11 +199,13 @@ fastacl_parse_ip6 (fastacl_parsed_t *p, vlib_buffer_t *b, ip6_header_t *ip6, u16
 }
 
 static_always_inline void
-fastacl_parse_packet (vlib_buffer_t *b, fastacl_parsed_t *p, u16 l2_ofs)
+fastacl_parse_packet (vlib_main_t *vm, vlib_buffer_t *b, fastacl_parsed_t *p, u16 l2_ofs)
 {
   ip4_header_t *ip0 = (ip4_header_t *) ((u8 *) vlib_buffer_get_current (b) + l2_ofs);
   u8 version = (ip0->ip_version_and_header_length >> 4);
   u16 avail = (b->current_length > l2_ofs) ? (u16) (b->current_length - l2_ofs) : 0;
+  u32 chain_len = vlib_buffer_length_in_chain (vm, b);
+  u32 chain_avail = (chain_len > l2_ofs) ? chain_len - l2_ofs : 0;
 
   clib_memset (p, 0, sizeof (*p));
   p->ip0 = ip0;
@@ -212,9 +217,9 @@ fastacl_parse_packet (vlib_buffer_t *b, fastacl_parsed_t *p, u16 l2_ofs)
     }
 
   if (PREDICT_TRUE (version == 4))
-    fastacl_parse_ip4 (p, ip0, avail);
+    fastacl_parse_ip4 (p, ip0, avail, chain_avail);
   else if (version == 6)
-    fastacl_parse_ip6 (p, b, (ip6_header_t *) ip0, avail);
+    fastacl_parse_ip6 (p, b, (ip6_header_t *) ip0, avail, chain_avail);
   else
     {
       p->unparseable = 1;
@@ -239,12 +244,12 @@ fastacl_classify_one (fastacl_main_t *fsm, const fastacl_parsed_t *p, u8 *action
     {
       ip6_header_t *ip6 = (ip6_header_t *) p->ip0;
       return fastacl_tss_lookup_ip6 (fsm, ip6, p->pkt_proto, p->l4_src_port, p->l4_dst_port, p->l4,
-				     p->l4_bytes, p->pkt_len, p->pkt_dscp, p->pkt_frag_flags,
+				     p->l4_bytes, p->ip_len, p->pkt_dscp, p->pkt_frag_flags,
 				     action_out);
     }
 
   return fastacl_tss_lookup_ip4 (fsm, p->ip0, p->pkt_proto, p->l4_src_port, p->l4_dst_port, p->l4,
-				 p->l4_bytes, p->pkt_len, p->pkt_dscp, p->pkt_frag_flags,
+				 p->l4_bytes, p->ip_len, p->pkt_dscp, p->pkt_frag_flags,
 				 action_out);
 }
 
@@ -265,7 +270,7 @@ fastacl_node_inline (vlib_main_t *vm, vlib_node_runtime_t *node, vlib_frame_t *f
 
   fastacl_parsed_t p_cur, p_next;
   if (n_left > 0)
-    fastacl_parse_packet (b[0], &p_cur, is_l2 ? vnet_buffer (b[0])->l2.l2_len : 0);
+    fastacl_parse_packet (vm, b[0], &p_cur, is_l2 ? vnet_buffer (b[0])->l2.l2_len : 0);
 
   while (n_left > 0)
     {
@@ -281,7 +286,7 @@ fastacl_node_inline (vlib_main_t *vm, vlib_node_runtime_t *node, vlib_frame_t *f
 
       if (PREDICT_TRUE (n_left >= 2))
 	{
-	  fastacl_parse_packet (b[1], &p_next, is_l2 ? vnet_buffer (b[1])->l2.l2_len : 0);
+	  fastacl_parse_packet (vm, b[1], &p_next, is_l2 ? vnet_buffer (b[1])->l2.l2_len : 0);
 	  if (PREDICT_TRUE (!p_next.unparseable))
 	    {
 	      if (PREDICT_FALSE (p_next.is_ip6))

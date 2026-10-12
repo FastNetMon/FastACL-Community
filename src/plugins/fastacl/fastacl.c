@@ -205,3 +205,16 @@ fastacl_interface_enable_disable (u32 sw_if_index, int enable_disable)
 
   return fastacl_interface_apply_arcs (fsm, sw_if_index, enable_disable);
 }
+
+static clib_error_t *
+fastacl_sw_interface_add_del (vnet_main_t *vnm, u32 sw_if_index, u32 is_add)
+{
+  fastacl_main_t *fsm = &fastacl_main;
+
+  if (!is_add)
+    fsm->enabled_interfaces = clib_bitmap_set (fsm->enabled_interfaces, sw_if_index, 0);
+
+  return 0;
+}
+
+VNET_SW_INTERFACE_ADD_DEL_FUNCTION (fastacl_sw_interface_add_del);

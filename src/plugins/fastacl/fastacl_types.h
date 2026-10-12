@@ -215,6 +215,7 @@ typedef struct
   u16 l4_src_port;
   u16 l4_dst_port;
   u16 pkt_len;
+  u16 ip_len;
   u8 pkt_dscp;
   u8 pkt_frag_flags;
 } fastacl_parsed_t;
