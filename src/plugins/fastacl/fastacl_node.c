@@ -11,6 +11,7 @@
 #include <vnet/ethernet/ethernet.h>
 #include <vnet/udp/udp_packet.h>
 #include <fastacl/fastacl.h>
+#include <fastacl/fastacl_aclb_lookup.h>
 #include <fastacl/fastacl_format.h>
 
 #ifndef CLIB_MARCH_VARIANT
@@ -240,17 +241,22 @@ fastacl_parse_packet (vlib_main_t *vm, vlib_buffer_t *b, fastacl_parsed_t *p, u1
 static_always_inline u32
 fastacl_classify_one (fastacl_main_t *fsm, const fastacl_parsed_t *p, u8 *action_out)
 {
-  if (PREDICT_FALSE (p->is_ip6))
-    {
-      ip6_header_t *ip6 = (ip6_header_t *) p->ip0;
-      return fastacl_tss_lookup_ip6 (fsm, ip6, p->pkt_proto, p->l4_src_port, p->l4_dst_port, p->l4,
-				     p->l4_bytes, p->ip_len, p->pkt_dscp, p->pkt_frag_flags,
-				     action_out);
-    }
+  fastacl_aclb_t *ab = &fsm->aclb;
+  fastacl_aclb_check_ctx_t ctx = { .fsm = fsm, .p = p };
+  fa_5tuple_t t;
+  u32 ace, ri;
 
-  return fastacl_tss_lookup_ip4 (fsm, p->ip0, p->pkt_proto, p->l4_src_port, p->l4_dst_port, p->l4,
-				 p->l4_bytes, p->ip_len, p->pkt_dscp, p->pkt_frag_flags,
-				 action_out);
+  if (PREDICT_FALSE (vec_len (ab->ace_to_rule) == 0))
+    return ~0u;
+
+  ctx.exact = fastacl_aclb_fill_5tuple (p, &t);
+  ace = fastacl_aclb_match (ab, &t, p->is_ip6, &ctx);
+  if (ace == ~0u)
+    return ~0u;
+
+  ri = ab->ace_to_rule[ace];
+  *action_out = pool_elt_at_index (fsm->rules, ri)->action.type;
+  return ri;
 }
 
 static_always_inline uword
@@ -287,13 +293,6 @@ fastacl_node_inline (vlib_main_t *vm, vlib_node_runtime_t *node, vlib_frame_t *f
       if (PREDICT_TRUE (n_left >= 2))
 	{
 	  fastacl_parse_packet (vm, b[1], &p_next, is_l2 ? vnet_buffer (b[1])->l2.l2_len : 0);
-	  if (PREDICT_TRUE (!p_next.unparseable))
-	    {
-	      if (PREDICT_FALSE (p_next.is_ip6))
-		fastacl_tss_prefetch_ip6 (fsm, (ip6_header_t *) p_next.ip0, p_next.pkt_proto);
-	      else
-		fastacl_tss_prefetch_ip4 (fsm, p_next.ip0, p_next.pkt_proto, p_next.pkt_len);
-	    }
 	}
 
       u32 trace_ri = ~0u, trace_order = 0;

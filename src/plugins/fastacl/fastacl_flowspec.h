@@ -116,13 +116,4 @@ fastacl_rule_precedence_cmp (const fastacl_rule_t *ra, u32 ai, const fastacl_rul
   return fastacl_fs_u32_cmp (ai, bi);
 }
 
-static_always_inline int
-fastacl_rule_outranks (const fastacl_rule_t *cand, u32 cand_ri, const fastacl_rule_t *best,
-		       u32 best_ri)
-{
-  if (best_ri == ~0u)
-    return 1;
-  return fastacl_rule_precedence_cmp (cand, cand_ri, best, best_ri) < 0;
-}
-
 #endif

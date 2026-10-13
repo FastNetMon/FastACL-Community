@@ -13,19 +13,20 @@ line rate. It is built for volumetric DDoS mitigation, where the rule count is
 large, the rules change while traffic is running, and the interesting decision
 is almost always "drop this".
 
-Rules are classified by Tuple Space Search, so per-packet cost scales with the
-number of distinct *mask shapes* in the rule set rather than with the number of
-rules: a million rules that share two shapes cost the same two hash probes as
-two rules would. The filter runs on both the routed and the bridged path from a
-single datapath, and matched packets can be mirrored to Linux over the kernel
-psample channel before the action is applied, so a rule can show what it
-dropped.
+Rules are classified by VPP's ACL plugin: the filter loads them into one ACL
+in RFC 8955 order and matches packets against the ACL plugin's TupleMerge hash
+tables for its lookup context, as ABF does. What the ACL does not carry --
+packet length, DSCP, fragment flags, and the FlowSpec rule that ports never
+match a later fragment -- is checked on each candidate the tables offer. The filter runs on both
+the routed and the bridged path from a single datapath, and matched packets
+can be mirrored to Linux over the kernel psample channel before the action is
+applied, so a rule can show what it dropped.
 
 Maturity level
 ______________
 
-Production. The drop path sustains 100 GbE line rate with a million rules loaded in
-the project's hardware lab.
+Production. The drop path filters 430 Mpps with 65,000 rules on a 62-worker
+system in the project's hardware lab.
 
 Features
 ________
@@ -49,56 +50,51 @@ ________
 Architecture
 ____________
 
-Classification: Tuple Space Search
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Classification: the ACL plugin
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A rule's *mask shape* is which fields it constrains plus the prefix lengths it
-uses — not the values. Rules sharing a shape go into one VPP bihash keyed on
-the masked packet fields, and that bihash is a *tuple*. Lookup masks the packet
-once per tuple and probes it, so the cost is O(distinct shapes), not O(rules).
+Each rule becomes one or more ACL entries: one per address family it applies
+to, one per protocol when it names ports without a protocol (TCP and UDP), and
+two when it matches either port (source side and destination side). All
+entries go into one ACL, in precedence order, through the ACL plugin's own
+``acl_add_replace`` message handler, called in-process, so the ACL's first
+match is the rule with
+the highest precedence. Precedence is rule order first, then RFC 8955 §5.1
+component-wise comparison, then the rule index as a final tiebreak.
 
-``show fastacl tuples`` reports the live shapes, the key width each one chose
-and how many rules it holds. Shape count is the number to watch when tuning a
-rule set: adding rules to an existing shape is close to free, while each new
-shape adds a probe to every packet.
+``show fastacl classifier`` reports the number of ACL entries, the ACL index and
+the lookup context.
 
-It also reports ``chains``, ``chained`` and ``deepest``. Rules whose key fully
-determines the match resolve in the probe alone; rules that produce the same
-key -- same prefix and protocol, differing only in port ranges, TCP flags,
-pkt-len, DSCP or fragment bits -- form a chain that a matching packet walks,
-re-checking those fields per member. ``deepest`` is the worst-case walk length
-for that shape, and the number to watch once shape count is under control.
+Candidate check
+~~~~~~~~~~~~~~~
 
-Key narrowing
-~~~~~~~~~~~~~
+The node fills the ACL 5-tuple from its own packet parser and walks the ACL
+plugin's TupleMerge tables for its lookup context with its own inline lookup,
+read-only. Each candidate the tables offer is checked; a rejected candidate is
+skipped and the lookup continues with the next one. The check re-runs the
+full rule only when
+the rule constrains packet length, DSCP or fragment flags, or when the ACL
+cannot judge the packet exactly: a later fragment, which carries no ports, or
+a truncated L4 header. Every other candidate is accepted as the ACL found it.
 
-A tuple whose mask permits it drops from the wide 24-byte (IPv4) or 40-byte
-(IPv6) key to a compact 8-byte or 16-byte one. The compact forms fit
-``bihash_8_8`` and ``bihash_16_8``, whose bucket and key-value pair share a
-cache line, so a probe costs one dependent memory access instead of two. On a
-working-set-bound lookup that is the difference that matters, rather than the
-byte count itself.
+Later fragments follow RFC 8955. A later fragment is looked up through the
+hash with its ports zeroed, and every candidate is re-checked, so port, ICMP
+and TCP-flag rules are rejected and only rules without L4 constraints match
+it. The lookup does not update the ACL plugin's shared per-entry hit counter.
 
-Verdict in the hash value
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Rule updates
+~~~~~~~~~~~~
 
-The 8-byte bihash value carries the rule index, the action type, and a bit
-recording whether the key covered the rule completely. When it did, no field
-outside the key needs re-checking, so the verdict is the probe's own. The
-datapath still reads the matched rule out of the pool, because the action
-parameters and the trace live there. Rules that constrain fields outside the key — port ranges, TCP flags,
-packet length, DSCP, fragment flags — are re-verified against the candidate
-after the probe.
+Adding or deleting a rule rebuilds the ACL. A batch add, and the sweep at the
+end of a replace, rebuild it once. Rebuilds run on the main thread under the
+worker barrier.
 
-Chains and precedence
-~~~~~~~~~~~~~~~~~~~~~
+VPP requirements
+~~~~~~~~~~~~~~~~
 
-Several rules can share one masked key; those form a chain held in precedence
-order, so the walk stops at the first rule that both outranks the current best
-and matches. Precedence is rule order first, then RFC 8955 §5.1 component-wise
-comparison, then the rule index as a final tiebreak. The result does not depend
-on the order tuples are probed in, which is what allows tuples to be added and
-removed while traffic runs.
+Stock FD.io VPP with the ACL plugin loaded. The filter uses the ACL plugin's
+exported methods, its installed lookup headers, and its ``acl_add_replace``
+message handler; it needs no ACL plugin changes.
 
 Datapath placement
 ~~~~~~~~~~~~~~~~~~
@@ -109,9 +105,9 @@ The filter is one node per path, attached as a feature:
 -  ``fastacl-filter-l2`` on the ``l2-input-ip4`` and ``l2-input-ip6`` arcs
 
 Both share the same classifier and rule set; only packet parsing differs. The
-node prefetches the next packet's headers and its TSS bucket while classifying
-the current one. The node is built per CPU variant through
-``MULTIARCH_SOURCES``, so VPP selects the best instruction set at runtime.
+node prefetches the next packet's headers while classifying the current one.
+The node is built per CPU variant through ``MULTIARCH_SOURCES``, so VPP selects
+the best instruction set at runtime.
 
 Enabling the filter on an interface arms all four arcs at once; there is no
 mode to select in the plugin. Which node a packet reaches is decided by how
@@ -146,18 +142,9 @@ configuration starts using the other node with no change to the filter.
 Configuration
 _____________
 
-::
-
-    fastacl {
-      tss-bihash-buckets 65536
-    }
-
-``tss-bihash-buckets`` is allocated per rule shape, so raise it for very large
-rule sets; a million-rule table runs ``1048576``. Values below ``1024`` are
-clamped up.
-
-The settings outside the ``fastacl`` stanza matter as much as the ones inside
-it. A 32-worker ConnectX-7 box carrying a million rules at 100 GbE runs:
+The plugin has no startup stanza of its own, and needs nothing in the
+``acl-plugin`` one. What matters is VPP's own configuration. The hardware lab's 32-worker ConnectX-7
+box at 100 GbE runs:
 
 ::
 
@@ -195,10 +182,16 @@ plugin sets it.
 ``statseg`` holds the per-rule counters, so ``size`` must cover
 ``rules x (workers + 1) x 16`` bytes.
 
-``main-heap-size`` has to cover the classifier as well as VPP's own needs. The
-bihash templates set ``BIHASH_USE_HEAP``, so every tuple's table allocates from
-the main heap rather than reserving its own region. 2 MB heap pages are worth
-setting; 4 KB pages cost measurably more TLB pressure on a table this size.
+``main-heap-size`` bounds the rule-set size. It holds the rule pool and
+everything the ACL plugin builds from the rules: its rule copies, the
+per-context entries and its hash tables, which bihash allocates from the main
+heap. A million rules that each expand to one ACL entry take about 0.9 GB of it
+(measured: 869 MB above an idle VPP), and a rule that expands to several
+entries costs proportionally more, so 12G leaves room for several million. The
+``acl-plugin`` stanza's ``hash lookup heap size`` and ``hash lookup hash
+memory`` have no effect on current VPP; ``hash lookup hash buckets`` (default
+65536) is the only setting there worth raising for very large rule sets. 2 MB
+heap pages are worth setting; 4 KB pages cost measurably more TLB pressure.
 
 ``rss { ipv4 ipv6 }`` is not optional for dual-stack work. Without ``ipv6`` in
 the list the NIC hashes IPv6 to a single queue and the whole family lands on
@@ -257,7 +250,7 @@ ________________
 
     vpp# show fastacl rules
     vpp# show fastacl aggregate-counters
-    vpp# show fastacl tuples
+    vpp# show fastacl classifier
     vpp# show fastacl interface
     vpp# clear fastacl counters
 

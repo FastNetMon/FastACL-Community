@@ -30,10 +30,10 @@ built inside a VPP tree.
   what it discarded. Delivery is over the kernel
   [psample](https://www.kernel.org/doc/html/latest/networking/index.html)
   netlink channel, readable by any ordinary Linux program.
-- **TSS classifier** (Tuple Space Search): rules are grouped by mask shape into
-  per-shape VPP bihash tables, so lookup cost scales with the number of *distinct
-  mask shapes* rather than the number of rules. Keys narrow to a compact 8-byte
-  (IPv4) or 16-byte (IPv6) form when the mask allows.
+- **Classifier built on VPP's ACL plugin**: rules are loaded into one ACL and
+  matched against its TupleMerge hash tables; packet length, DSCP, fragment bits
+  and the FlowSpec rule for later fragments are checked on each candidate. The
+  ACL plugin is used unmodified, on stock FD.io VPP.
 - **Rule ordering** following RFC 8955 §5.1 component-wise precedence, with
   single and batch rule installation.
 - **Dual-stack scoping that follows the rule, not the family.** A rule applies
@@ -48,7 +48,8 @@ built inside a VPP tree.
 
 ## Building
 
-The plugin builds out-of-tree against installed VPP development packages.
+The plugin builds out-of-tree against installed VPP development packages and
+runs on stock FD.io VPP; the ACL plugin is used unmodified:
 
 ```sh
 # Prerequisites: VPP 25.10 or 26.06 dev packages (vpp-dev, libvppinfra-dev)
@@ -86,17 +87,15 @@ fastacl rule add order 20 dst6 2001:db8::/32 proto 6 \
 
 show fastacl rules
 show fastacl aggregate-counters
-show fastacl tuples
+show fastacl classifier
 
 # Per-rule counters are exact and on by default; turn the counter write off
 fastacl per-rule-stats disable
 fastacl per-rule-stats            # no argument reports the current state
 ```
 
-`show fastacl tuples` reports how many distinct mask shapes are active — the
-quantity that actually drives per-packet classification cost — along with
-`chains` / `chained` / `deepest`, which say how many rules share a key and how
-long the resulting walk can get.
+`show fastacl classifier` reports how many ACL entries the rule set expanded to,
+with the ACL index and the lookup context it is bound to.
 
 To read sampled packets, enable the psample channel and attach any psample
 consumer:
@@ -108,22 +107,9 @@ show fastacl sampling
 
 ### Tuning
 
-One startup-config knob sizes the classifier's hash tables. It is allocated per
-rule *shape*, so raise it for large rule sets — a million-rule table runs
-`1048576`. Values below `1024` are clamped up.
-
-```
-fastacl {
-  tss-bihash-buckets 1048576
-}
-```
-
-(`tss-bihash-memory-mb` is still parsed so old configurations start, but it does
-nothing: the classifier's hash tables set `BIHASH_USE_HEAP` and allocate from
-the VPP main heap. Size the main heap instead.)
-
-The settings outside the `fastacl` stanza matter as much as the one inside it.
-A 32-worker ConnectX-7 box carrying a million rules at 100 GbE runs:
+The plugin has no startup stanza of its own, and needs nothing in the
+`acl-plugin` one. What matters is VPP's own configuration. The hardware lab's 32-worker ConnectX-7
+box at 100 GbE runs:
 
 ```
 memory  { main-heap-size 12G  main-heap-page-size 2M }
@@ -143,20 +129,30 @@ dpdk {
   rule table from the last-level cache and every per-rule counter write becomes
   a cache miss; 4096 measures an order of magnitude less ingress loss than 8192
   at a million rules. Nothing in the plugin sets it.
-- `statseg size` has to cover the per-rule counters —
-  `rules x (workers + 1) x 16` bytes.
-- `main-heap-size` has to cover the classifier: every tuple's hash table comes
-  off the main heap. 2 MB pages are worth setting.
-- `rss { ipv4 ipv6 }` is not optional for dual-stack work. Without `ipv6` in the
-  list the NIC hashes the whole family to one queue, and one worker.
+- `statseg size` has to cover the per-rule counters — `rules x (workers + 1) x
+  16` bytes.
+- `main-heap-size` bounds the rule-set size: it holds the rule pool and
+  everything the ACL plugin builds from the rules, including its hash tables. A
+  million rules that each expand to one ACL entry take about 0.9 GB of it
+  (measured: 869 MB above an idle VPP), and a rule that expands to several
+  entries costs proportionally more, so 12G leaves room for several million. 2
+  MB pages are worth setting.
+- The `acl-plugin` stanza's `hash lookup heap size` and `hash lookup hash
+  memory` have no effect on current VPP; `hash lookup hash buckets` (default
+  65536) is optional tuning for very large rule sets.
+- `rss { ipv4 ipv6 }` is not optional for dual-stack work. Without `ipv6` in
+  the list the NIC hashes the whole family to one queue, and one worker.
 
 ## Performance notes
 
-Classification cost is a function of the number of **distinct mask shapes**, not
-the number of rules — a thousand rules that share one shape cost roughly the
-same as one rule. A rule set spread across many shapes costs proportionally more,
-because each shape is a separate hash probe. When sizing a deployment, count
-shapes with `show fastacl tuples` rather than counting rules.
+Classification cost follows the ACL plugin's TupleMerge lookup: it depends on
+how many distinct mask types the rule set produces, not on the number of rules.
+Rules that constrain packet length, DSCP or fragment flags cost a re-check
+when they are candidates. Later fragments are looked up through the hash too,
+and the lookup never writes the ACL plugin's shared hit counter, so a single
+rule hit by every worker does not contend on one cache line. Every rule change rebuilds the
+ACL -- about 0.4 s at a million rules -- so a large rule set is best loaded
+with the batch API.
 
 Sustaining 100 Gbps at small frame sizes requires the usual VPP data-plane
 hygiene: multiple worker threads each pinned to a dedicated core, RSS spreading

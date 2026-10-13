@@ -16,42 +16,12 @@ extern int vnet_l2_feature_enable_disable (const char *arc_name, const char *nod
 fastacl_main_t fastacl_main;
 
 static clib_error_t *
-fastacl_config (vlib_main_t *vm, unformat_input_t *input)
-{
-  fastacl_main_t *fsm = &fastacl_main;
-  u32 buckets_val;
-  u32 memory_mb_val;
-
-  while (unformat_check_input (input) != UNFORMAT_END_OF_INPUT)
-    {
-      if (unformat (input, "tss-bihash-buckets %u", &buckets_val))
-	fsm->tss_buckets = clib_max (buckets_val, FASTACL_TSS_BUCKETS_MIN);
-      else if (unformat (input, "tss-bihash-memory-mb %u", &memory_mb_val))
-	vlib_log_warn (fsm->log_class, "tss-bihash-memory-mb is accepted for configuration "
-				       "compatibility and has no effect: the classifier tables "
-				       "allocate from the VPP main heap");
-      else if (unformat_skip_white_space (input) &&
-	       unformat_check_input (input) == UNFORMAT_END_OF_INPUT)
-	break;
-      else
-	return clib_error_return (0, "unknown input '%U'", format_unformat_error, input);
-    }
-
-  return 0;
-}
-
-VLIB_CONFIG_FUNCTION (fastacl_config, "fastacl");
-
-static clib_error_t *
 fastacl_init (vlib_main_t *vm)
 {
   fastacl_main_t *fsm = &fastacl_main;
   fsm->vlib_main = vm;
   fsm->vnet_main = vnet_get_main ();
 
-  fsm->tuple_by_mask = hash_create_mem (0, sizeof (fastacl_tuple_mask_t), sizeof (uword));
-
-  fsm->tss_buckets = FASTACL_TSS_BUCKETS_DEFAULT;
   fsm->rule_stats_enabled = 1;
 
   vec_validate (fsm->per_worker, vlib_num_workers ());

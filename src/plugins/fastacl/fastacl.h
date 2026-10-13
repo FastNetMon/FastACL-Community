@@ -8,7 +8,7 @@
 #include <vppinfra/bitmap.h>
 
 #include <fastacl/fastacl_types.h>
-#include <fastacl/fastacl_tss.h>
+#include <fastacl/fastacl_aclb.h>
 #include <fastacl/fastacl_match_inline.h>
 #include <fastacl/fastacl_flowspec.h>
 
@@ -36,15 +36,8 @@ struct fastacl_main_t_
   u32 n_sample_rules;
   fastacl_psample_main_t psample;
 
-  fastacl_tuple_t *tuples;
-  uword *tuple_by_mask;
-  u32 *tuple_index_v4;
-  u32 *tuple_index_v6;
-  fastacl_chain_t *chains;
-
-  u32 tss_buckets;
+  fastacl_aclb_t aclb;
   u8 rule_stats_enabled;
-  u8 tss_bulk_mode;
 
   u16 msg_id_base;
 

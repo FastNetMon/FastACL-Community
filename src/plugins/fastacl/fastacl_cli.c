@@ -300,34 +300,21 @@ VLIB_CLI_COMMAND (fastacl_rule_stats_command, static) = {
 };
 
 static clib_error_t *
-fastacl_show_tuples_command_fn (vlib_main_t *vm, unformat_input_t *input, vlib_cli_command_t *cmd)
+fastacl_show_classifier_command_fn (vlib_main_t *vm, unformat_input_t *input,
+				    vlib_cli_command_t *cmd)
 {
   fastacl_main_t *fsm = &fastacl_main;
-  fastacl_tuple_t *t;
 
-  vlib_cli_output (vm, "tuples: %u", pool_elts (fsm->tuples));
-  if (pool_elts (fsm->tuples) == 0)
-    return 0;
-
-  vlib_cli_output (vm, "%-6s %-10s %-6s %-6s %-6s %-6s %-8s %-8s %-8s %-8s", "id", "flags", "dplen",
-		   "splen", "v6", "key", "rules", "chains", "chained", "deepest");
-  pool_foreach (t, fsm->tuples)
-    {
-      u32 n_chains, deepest, chained;
-      const char *keyw = fastacl_tss_width_name (t->width);
-
-      fastacl_tuple_chain_stats (fsm, t, &n_chains, &deepest, &chained);
-      vlib_cli_output (vm, "%-6u 0x%-8x %-6u %-6u %-6u %-6s %-8u %-8u %-8u %-8u",
-		       (u32) (t - fsm->tuples), t->mask.flags, t->mask.dst_plen, t->mask.src_plen,
-		       t->mask.is_ip6, keyw, t->n_rules, n_chains, chained, deepest);
-    }
+  vlib_cli_output (vm, "acl entries: %u, acl index %d, lookup context %d",
+		   vec_len (fsm->aclb.ace_to_rule), (int) fsm->aclb.acl_index,
+		   (int) fsm->aclb.lc_index);
   return 0;
 }
 
-VLIB_CLI_COMMAND (fastacl_show_tuples_command, static) = {
-  .path = "show fastacl tuples",
-  .short_help = "show fastacl tuples — TSS classifier state",
-  .function = fastacl_show_tuples_command_fn,
+VLIB_CLI_COMMAND (fastacl_show_classifier_command, static) = {
+  .path = "show fastacl classifier",
+  .short_help = "show fastacl classifier",
+  .function = fastacl_show_classifier_command_fn,
 };
 
 static u32 *

@@ -9,52 +9,13 @@
 #include <vnet/tcp/tcp_packet.h>
 #include <fastacl/fastacl_types.h>
 
-static_always_inline u32
-fastacl_ip4_mask (u8 plen)
-{
-  ASSERT (plen <= 32);
-  return ip4_main.fib_masks[plen];
-}
-
-static_always_inline int
-fastacl_ip4_prefix_match (u32 flags, u32 want_flag, const ip4_address_t *pkt,
-			  const ip4_address_t *rule, u8 plen)
-{
-  if (!(flags & want_flag))
-    return 1;
-  ASSERT (plen <= 32);
-  return ip4_destination_matches_route (&ip4_main, pkt, rule, plen);
-}
-
-static_always_inline int
-fastacl_ip6_prefix_match (u32 flags, u32 want_flag, const ip6_address_t *pkt,
-			  const ip6_address_t *rule, u8 plen)
-{
-  if (!(flags & want_flag))
-    return 1;
-  ASSERT (plen <= 128);
-
-  return ip6_unaligned_destination_matches_route (&ip6_main, (ip6_address_t *) pkt,
-						  (ip6_address_t *) rule, plen);
-}
-
-static_always_inline void
-fastacl_ip6_apply_mask (const ip6_address_t *addr, u8 plen, u64 *hi, u64 *lo)
-{
-  ASSERT (plen <= 128);
-  const ip6_address_t *m = &ip6_main.fib_masks[plen];
-
-  *hi = clib_mem_unaligned (&addr->as_u64[0], u64) & m->as_u64[0];
-  *lo = clib_mem_unaligned (&addr->as_u64[1], u64) & m->as_u64[1];
-}
-
 static_always_inline int
 fastacl_match_fields (fastacl_match_t *m, u8 pkt_proto, u16 l4_src_port, u16 l4_dst_port, u8 *l4,
 		      u16 l4_bytes, u16 pkt_len, u8 pkt_dscp, u8 pkt_frag_flags)
 {
   if ((m->flags & FASTACL_MATCH_PROTO) && pkt_proto != m->proto)
     return 0;
-  if (m->flags & (FASTACL_MATCH_DST_PORT | FASTACL_MATCH_SRC_PORT | FASTACL_MATCH_EITHER_PORT))
+  if (m->flags & FASTACL_MATCH_PORT_BITS)
     {
       if ((pkt_proto != IP_PROTOCOL_TCP && pkt_proto != IP_PROTOCOL_UDP) ||
 	  l4_bytes < FASTACL_L4_PORTS_BYTES)
@@ -73,7 +34,7 @@ fastacl_match_fields (fastacl_match_t *m, u8 pkt_proto, u16 l4_src_port, u16 l4_
       if (!src_in && !dst_in)
 	return 0;
     }
-  if (m->flags & (FASTACL_MATCH_ICMP_TYPE | FASTACL_MATCH_ICMP_CODE))
+  if (m->flags & FASTACL_MATCH_ICMP_BITS)
     {
       if ((pkt_proto != IP_PROTOCOL_ICMP && pkt_proto != IP_PROTOCOL_ICMP6) || !l4)
 	return 0;

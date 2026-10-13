@@ -19,7 +19,7 @@ add_vpp_plugin(fastacl
   fastacl_psample.c
   fastacl_format.c
   fastacl_rule.c
-  fastacl_tss.c
+  fastacl_aclb.c
   fastacl_node.c
 
   MULTIARCH_SOURCES
@@ -32,7 +32,8 @@ add_vpp_plugin(fastacl
   fastacl.h
   fastacl_format.h
   fastacl_types.h
-  fastacl_tss.h
+  fastacl_aclb.h
+  fastacl_aclb_lookup.h
   fastacl_match_inline.h
   fastacl_flowspec.h
 )

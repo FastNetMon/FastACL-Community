@@ -6,11 +6,11 @@ features:
       - all 12 match types, IPv4 and IPv6 dual-stack
       - a rule applies to the family its addresses name, and to both when it
         names none
-  - Tuple Space Search classifier:
-      - rules grouped by mask shape, so lookup cost scales with the number of
-        distinct shapes rather than the number of rules
-      - keys narrow to a compact 8-byte (IPv4) or 16-byte (IPv6) form when the
-        mask allows
+  - Classification through the VPP ACL plugin:
+      - rules loaded into one ACL in RFC 8955 order and matched by its
+        TupleMerge hash tables, on stock VPP
+      - what the ACL does not carry is checked on each candidate, and a
+        rejected candidate falls through to the next rule
   - Actions:
       - drop, and permit to match and forward unchanged
   - Per-rule traffic sampling:
@@ -26,11 +26,10 @@ description: |-
         FastACL filters packets against an RFC 8955/8956 FlowSpec rule set at
         line rate, for volumetric DDoS mitigation where the rule count is
         large, rules change while traffic is running, and the decision is
-        almost always to drop. Rules are classified by Tuple Space Search:
-        rules sharing a mask shape occupy one bihash, so a million rules over
-        two shapes cost the same two probes as two rules would. The action and
-        an exact-match bit are carried in the hash value, so discarding a
-        packet needs no rule dereference. The filter attaches to the
+        almost always to drop. Rules are loaded into one ACL of VPP's ACL
+        plugin in precedence order and matched by its hash lookup; packet
+        length, DSCP, fragment bits and the FlowSpec rule for later fragments
+        are checked on each candidate. The filter attaches to the
         ip4-unicast and ip6-unicast arcs and to l2-input-ip4 and l2-input-ip6,
         so the same rule set serves routed and bridged deployments. Matched
         packets can be mirrored to Linux over the kernel psample channel

@@ -34,6 +34,11 @@ typedef enum
 #undef _
 } fastacl_match_flag_t;
 
+#define FASTACL_MATCH_ADDR_BITS (FASTACL_MATCH_DST_PREFIX | FASTACL_MATCH_SRC_PREFIX)
+#define FASTACL_MATCH_PORT_BITS                                                                    \
+  (FASTACL_MATCH_DST_PORT | FASTACL_MATCH_SRC_PORT | FASTACL_MATCH_EITHER_PORT)
+#define FASTACL_MATCH_ICMP_BITS (FASTACL_MATCH_ICMP_TYPE | FASTACL_MATCH_ICMP_CODE)
+
 #define FASTACL_FRAG_DF	 (1 << 0)
 #define FASTACL_FRAG_ISF (1 << 1)
 #define FASTACL_FRAG_FF	 (1 << 2)
@@ -162,9 +167,6 @@ typedef struct fastacl_rule_t_
   u64 byte_count;
   fastacl_rate_snapshot_t rate_snap;
 } fastacl_rule_t;
-
-#define FASTACL_TSS_BUCKETS_DEFAULT (64 * 1024)
-#define FASTACL_TSS_BUCKETS_MIN	    1024
 
 #define FASTACL_L1_OVERHEAD_BYTES 38
 
