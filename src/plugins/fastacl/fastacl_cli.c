@@ -306,6 +306,7 @@ fastacl_show_tuples_command_fn (vlib_main_t *vm, unformat_input_t *input, vlib_c
   fastacl_tuple_t *t;
 
   vlib_cli_output (vm, "tuples: %u", pool_elts (fsm->tuples));
+  vlib_cli_output (vm, "tuple-merge: %s", fsm->tuple_merge ? "on" : "off");
   if (pool_elts (fsm->tuples) == 0)
     return 0;
 

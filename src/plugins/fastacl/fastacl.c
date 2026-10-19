@@ -26,6 +26,10 @@ fastacl_config (vlib_main_t *vm, unformat_input_t *input)
     {
       if (unformat (input, "tss-bihash-buckets %u", &buckets_val))
 	fsm->tss_buckets = clib_max (buckets_val, FASTACL_TSS_BUCKETS_MIN);
+      else if (unformat (input, "tuple-merge on"))
+	fsm->tuple_merge = 1;
+      else if (unformat (input, "tuple-merge off"))
+	fsm->tuple_merge = 0;
       else if (unformat (input, "tss-bihash-memory-mb %u", &memory_mb_val))
 	vlib_log_warn (fsm->log_class, "tss-bihash-memory-mb is accepted for configuration "
 				       "compatibility and has no effect: the classifier tables "
@@ -52,6 +56,7 @@ fastacl_init (vlib_main_t *vm)
   fsm->tuple_by_mask = hash_create_mem (0, sizeof (fastacl_tuple_mask_t), sizeof (uword));
 
   fsm->tss_buckets = FASTACL_TSS_BUCKETS_DEFAULT;
+  fsm->tuple_merge = FASTACL_TUPLE_MERGE_DEFAULT;
   fsm->rule_stats_enabled = 1;
 
   vec_validate (fsm->per_worker, vlib_num_workers ());

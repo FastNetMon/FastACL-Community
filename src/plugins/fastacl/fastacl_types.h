@@ -161,6 +161,7 @@ typedef struct fastacl_rule_t_
   u64 packet_count;
   u64 byte_count;
   fastacl_rate_snapshot_t rate_snap;
+  u32 tuple_index[2];
 } fastacl_rule_t;
 
 #define FASTACL_TSS_BUCKETS_DEFAULT (64 * 1024)

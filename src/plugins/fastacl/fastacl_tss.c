@@ -61,16 +61,123 @@ rule_is_family_agnostic (const fastacl_match_t *m)
   return (m->flags & (FASTACL_MATCH_ADDR_BITS | FASTACL_MATCH_IS_IP6)) == 0;
 }
 
+static_always_inline int
+rule_family (const fastacl_match_t *m)
+{
+  return !!(m->flags & FASTACL_MATCH_IS_IP6);
+}
+
+static_always_inline u8
+mask_prefix_set (fastacl_tuple_mask_t *mask, u32 flag, u8 plen)
+{
+  if (plen)
+    mask->flags |= flag;
+  else
+    mask->flags &= ~flag;
+  return plen;
+}
+
+static_always_inline u8
+match_prefix_len (const fastacl_match_t *m, u32 flag, u8 plen)
+{
+  return (m->flags & flag) ? plen : 0;
+}
+
 static_always_inline void
-mask_from_rule (const fastacl_match_t *m, fastacl_tuple_mask_t *out)
+mask_from_rule (const fastacl_match_t *m, int is_ip6, fastacl_tuple_mask_t *out)
 {
   clib_memset (out, 0, sizeof (*out));
-  out->flags = m->flags & FASTACL_TSS_MASK_FLAGS_BITS;
-  if (m->flags & FASTACL_MATCH_DST_PREFIX)
-    out->dst_plen = m->dst_prefix_len;
-  if (m->flags & FASTACL_MATCH_SRC_PREFIX)
-    out->src_plen = m->src_prefix_len;
-  out->is_ip6 = !!(m->flags & FASTACL_MATCH_IS_IP6);
+  out->flags = m->flags & FASTACL_MATCH_PROTO;
+  out->dst_plen =
+    mask_prefix_set (out, FASTACL_MATCH_DST_PREFIX,
+		     match_prefix_len (m, FASTACL_MATCH_DST_PREFIX, m->dst_prefix_len));
+  out->src_plen =
+    mask_prefix_set (out, FASTACL_MATCH_SRC_PREFIX,
+		     match_prefix_len (m, FASTACL_MATCH_SRC_PREFIX, m->src_prefix_len));
+  out->is_ip6 = is_ip6;
+}
+
+static_always_inline int
+mask_eq (const fastacl_tuple_mask_t *a, const fastacl_tuple_mask_t *b)
+{
+  return clib_memcmp (a, b, sizeof (*a)) == 0;
+}
+
+static_always_inline int
+mask_covers (const fastacl_tuple_mask_t *t, const fastacl_tuple_mask_t *r)
+{
+  return t->is_ip6 == r->is_ip6 && !(t->flags & ~r->flags) && t->dst_plen <= r->dst_plen &&
+	 t->src_plen <= r->src_plen;
+}
+
+static_always_inline u32
+mask_specificity (const fastacl_tuple_mask_t *m)
+{
+  return 2 * (m->dst_plen + m->src_plen) + !!(m->flags & FASTACL_MATCH_PROTO);
+}
+
+static_always_inline u8
+plen_relax_ip4 (u8 plen, int gentle)
+{
+  if (plen == 32)
+    return gentle ? 29 : 26;
+  if (plen > 24)
+    return plen - (gentle ? 2 : 5);
+  if (plen > 16)
+    return plen - (gentle ? 1 : 4);
+  if (plen > 8)
+    return plen - (gentle ? 1 : 2);
+  return plen;
+}
+
+static_always_inline u8
+plen_relax_ip6 (u8 plen)
+{
+  if (plen == 128)
+    return 64;
+  return plen >= 64 ? 56 : plen - plen % 8;
+}
+
+static_always_inline u8
+plen_relax (u8 plen, int is_ip6, int gentle)
+{
+  return is_ip6 ? plen_relax_ip6 (plen) : plen_relax_ip4 (plen, gentle);
+}
+
+static_always_inline void
+mask_drop_weaker_addr (fastacl_tuple_mask_t *m)
+{
+  if (!m->dst_plen || !m->src_plen)
+    return;
+  if (m->src_plen + FASTACL_TM_ADDR_DELTA < m->dst_plen)
+    m->src_plen = mask_prefix_set (m, FASTACL_MATCH_SRC_PREFIX, 0);
+  else if (m->dst_plen + FASTACL_TM_ADDR_DELTA < m->src_plen)
+    m->dst_plen = mask_prefix_set (m, FASTACL_MATCH_DST_PREFIX, 0);
+}
+
+static_always_inline void
+mask_relax (fastacl_tuple_mask_t *m, int gentle)
+{
+  mask_drop_weaker_addr (m);
+  m->dst_plen =
+    mask_prefix_set (m, FASTACL_MATCH_DST_PREFIX, plen_relax (m->dst_plen, m->is_ip6, gentle));
+  m->src_plen =
+    mask_prefix_set (m, FASTACL_MATCH_SRC_PREFIX, plen_relax (m->src_plen, m->is_ip6, gentle));
+}
+
+static_always_inline u8
+mask_field_plen (const fastacl_tuple_mask_t *m, int is_src)
+{
+  return is_src ? m->src_plen : m->dst_plen;
+}
+
+static_always_inline void
+mask_field_set (fastacl_tuple_mask_t *m, int is_src, u8 plen)
+{
+  if (is_src)
+    m->src_plen = mask_prefix_set (m, FASTACL_MATCH_SRC_PREFIX, plen);
+  else
+    m->dst_plen = mask_prefix_set (m, FASTACL_MATCH_DST_PREFIX, plen);
 }
 
 static_always_inline void
@@ -91,10 +198,11 @@ key_from_fields_ip4 (u32 flags, u32 dst, u8 dst_plen, u32 src, u8 src_plen, u8 p
 }
 
 static_always_inline void
-key_from_rule_ip4 (const fastacl_match_t *m, clib_bihash_kv_24_8_t *kv)
+key_from_rule_ip4 (const fastacl_tuple_mask_t *mask, const fastacl_match_t *m,
+		   clib_bihash_kv_24_8_t *kv)
 {
-  key_from_fields_ip4 (m->flags, m->dst_addr.ip4.as_u32, m->dst_prefix_len, m->src_addr.ip4.as_u32,
-		       m->src_prefix_len, m->proto, kv);
+  key_from_fields_ip4 (mask->flags, m->dst_addr.ip4.as_u32, mask->dst_plen, m->src_addr.ip4.as_u32,
+		       mask->src_plen, m->proto, kv);
 }
 
 static_always_inline void
@@ -130,10 +238,11 @@ key_from_fields_ip6 (u32 flags, const ip6_address_t *dst, u8 dst_plen, const ip6
 }
 
 static_always_inline void
-key_from_rule_ip6 (const fastacl_match_t *m, clib_bihash_kv_40_8_t *kv)
+key_from_rule_ip6 (const fastacl_tuple_mask_t *mask, const fastacl_match_t *m,
+		   clib_bihash_kv_40_8_t *kv)
 {
-  key_from_fields_ip6 (m->flags, &m->dst_addr.ip6, m->dst_prefix_len, &m->src_addr.ip6,
-		       m->src_prefix_len, m->proto, kv);
+  key_from_fields_ip6 (mask->flags, &m->dst_addr.ip6, mask->dst_plen, &m->src_addr.ip6,
+		       mask->src_plen, m->proto, kv);
 }
 
 static_always_inline void
@@ -247,6 +356,7 @@ tuple_get_or_create (fastacl_main_t *fsm, const fastacl_tuple_mask_t *mask)
 
   pool_get_zero (fsm->tuples, t);
   t->mask = *mask;
+  t->bound.index = ~0u;
   hash_set_mem_alloc (&fsm->tuple_by_mask, mask, t - fsm->tuples);
 
   t->hash_name = format (0, "fastacl-tss-%u%c", t - fsm->tuples, 0);
@@ -309,11 +419,14 @@ tss_chain_for_insert (fastacl_main_t *fsm, fastacl_tuple_t *t, u64 value, u32 *n
 }
 
 static u64
-tss_rule_value (fastacl_main_t *fsm, u32 rule_index)
+tss_rule_value (fastacl_main_t *fsm, const fastacl_tuple_t *t, u32 rule_index)
 {
   fastacl_rule_t *rule = pool_elt_at_index (fsm->rules, rule_index);
+  fastacl_tuple_mask_t own;
 
-  return fastacl_val_make_rule (rule_index, rule_key_complete (&rule->match), rule->action.type);
+  mask_from_rule (&rule->match, t->mask.is_ip6, &own);
+  return fastacl_val_make_rule (
+    rule_index, rule_key_complete (&rule->match) && mask_eq (&own, &t->mask), rule->action.type);
 }
 
 static fastacl_chain_outcome_t
@@ -338,7 +451,7 @@ tss_chain_left (fastacl_main_t *fsm, fastacl_tuple_t *t, u64 value, u32 rule_ind
       u32 last_ri = chain->rule_indices[0];
 
       tuple_chain_free (fsm, t, chain_index);
-      *replacement = tss_rule_value (fsm, last_ri);
+      *replacement = tss_rule_value (fsm, t, last_ri);
       return FASTACL_CHAIN_COLLAPSED;
     }
 
@@ -349,9 +462,9 @@ static_always_inline void
 tss_key_from_rule (const fastacl_tuple_t *t, const fastacl_match_t *m, fastacl_tss_key_t *key)
 {
   if (t->mask.is_ip6)
-    key_from_rule_ip6 (m, &key->kv6);
+    key_from_rule_ip6 (&t->mask, m, &key->kv6);
   else
-    key_from_rule_ip4 (m, &key->kv4);
+    key_from_rule_ip4 (&t->mask, m, &key->kv4);
 }
 
 static_always_inline int
@@ -380,7 +493,7 @@ tss_del (fastacl_tuple_t *t, fastacl_tss_key_t *key)
     tss4_del (t, &key->kv4);
 }
 
-static void
+static u32
 tss_bihash_insert (fastacl_main_t *fsm, fastacl_tuple_t *t, u32 rule_index)
 {
   fastacl_rule_t *rule = pool_elt_at_index (fsm->rules, rule_index);
@@ -392,8 +505,8 @@ tss_bihash_insert (fastacl_main_t *fsm, fastacl_tuple_t *t, u32 rule_index)
 
   if (tss_search (t, &key, &value) != 0)
     {
-      tss_store (t, &key, tss_rule_value (fsm, rule_index));
-      return;
+      tss_store (t, &key, tss_rule_value (fsm, t, rule_index));
+      return ~0u;
     }
 
   fastacl_chain_t *chain = tss_chain_for_insert (fsm, t, value, &new_chain_index);
@@ -401,6 +514,7 @@ tss_bihash_insert (fastacl_main_t *fsm, fastacl_tuple_t *t, u32 rule_index)
     tss_store (t, &key, fastacl_val_make_chain (new_chain_index));
 
   sorted_vec_insert (fsm, &chain->rule_indices, rule_index);
+  return chain - fsm->chains;
 }
 
 static int
@@ -461,22 +575,16 @@ tss_value_holds_duplicate (fastacl_main_t *fsm, u64 value, u32 order, const fast
   return 0;
 }
 
-int
-fastacl_tss_rule_exists (fastacl_main_t *fsm, u32 order, const fastacl_match_t *match)
+static int
+tuple_holds_duplicate (fastacl_main_t *fsm, fastacl_tuple_t *t, const fastacl_tuple_mask_t *mask,
+		       u32 order, const fastacl_match_t *match)
 {
-  fastacl_tuple_mask_t mask;
-  fastacl_tuple_t *t;
   fastacl_tss_key_t key;
-  uword *p;
   u64 value;
 
-  mask_from_rule (match, &mask);
-
-  p = hash_get_mem (fsm->tuple_by_mask, &mask);
-  if (!p)
+  if (!mask_covers (&t->mask, mask))
     return 0;
 
-  t = pool_elt_at_index (fsm->tuples, p[0]);
   tss_key_from_rule (t, match, &key);
   if (tss_search (t, &key, &value) != 0)
     return 0;
@@ -484,53 +592,239 @@ fastacl_tss_rule_exists (fastacl_main_t *fsm, u32 order, const fastacl_match_t *
   return tss_value_holds_duplicate (fsm, value, order, match);
 }
 
-static void
-tss_insert_one (fastacl_main_t *fsm, u32 rule_index, const fastacl_tuple_mask_t *mask)
+int
+fastacl_tss_rule_exists (fastacl_main_t *fsm, u32 order, const fastacl_match_t *match)
 {
-  fastacl_tuple_t *t = tuple_get_or_create (fsm, mask);
+  fastacl_tuple_mask_t mask;
+  u32 *ti;
+
+  mask_from_rule (match, rule_family (match), &mask);
+
+  vec_foreach (ti, *tuple_family_vec (fsm, mask.is_ip6))
+    if (tuple_holds_duplicate (fsm, pool_elt_at_index (fsm->tuples, *ti), &mask, order, match))
+      return 1;
+
+  return 0;
+}
+
+static void
+tuple_order_place (fastacl_main_t *fsm, fastacl_tuple_t *t)
+{
+  u32 **pv = tuple_family_vec (fsm, t->mask.is_ip6);
+  u32 tuple_index = t - fsm->tuples;
+  u32 i;
+
+  fastacl_u32_vec_remove_value (pv, tuple_index);
+  for (i = 0; i < vec_len (*pv); i++)
+    {
+      fastacl_tuple_t *other = pool_elt_at_index (fsm->tuples, (*pv)[i]);
+
+      if (fastacl_rule_outranks (&t->bound, t->bound.index, &other->bound, other->bound.index))
+	break;
+    }
+  vec_insert_elts (*pv, &tuple_index, 1, i);
+}
+
+static void
+tuple_bound_raise (fastacl_main_t *fsm, fastacl_tuple_t *t, const fastacl_rule_t *rule)
+{
+  if (!fastacl_rule_outranks (rule, rule->index, &t->bound, t->bound.index))
+    return;
+
+  t->bound = *rule;
+  tuple_order_place (fsm, t);
+}
+
+static u32
+tuple_select (fastacl_main_t *fsm, const fastacl_tuple_mask_t *mask)
+{
+  u32 best = ~0u, best_score = 0;
+  uword *p;
+  u32 *ti;
+
+  if (!fsm->tuple_merge)
+    {
+      p = hash_get_mem (fsm->tuple_by_mask, mask);
+      return p ? p[0] : ~0u;
+    }
+
+  vec_foreach (ti, *tuple_family_vec (fsm, mask->is_ip6))
+    {
+      fastacl_tuple_t *t = pool_elt_at_index (fsm->tuples, *ti);
+      u32 score = mask_specificity (&t->mask) + 1;
+
+      if (mask_covers (&t->mask, mask) && score > best_score)
+	{
+	  best = *ti;
+	  best_score = score;
+	}
+    }
+  return best;
+}
+
+static u32
+tuple_add_rule (fastacl_main_t *fsm, u32 tuple_index, u32 rule_index)
+{
+  fastacl_tuple_t *t = pool_elt_at_index (fsm->tuples, tuple_index);
+  fastacl_rule_t *rule = pool_elt_at_index (fsm->rules, rule_index);
 
   t->n_rules++;
-  tss_bihash_insert (fsm, t, rule_index);
+  rule->tuple_index[t->mask.is_ip6] = tuple_index;
+  tuple_bound_raise (fsm, t, rule);
+  return tss_bihash_insert (fsm, t, rule_index);
+}
+
+static void
+tuple_remove_rule (fastacl_main_t *fsm, u32 tuple_index, u32 rule_index)
+{
+  fastacl_tuple_t *t = pool_elt_at_index (fsm->tuples, tuple_index);
+
+  if (!tss_bihash_remove (fsm, t, rule_index))
+    return;
+
+  if (--t->n_rules != 0)
+    return;
+
+  fastacl_u32_vec_remove_value (tuple_family_vec (fsm, t->mask.is_ip6), tuple_index);
+  hash_unset_mem_free (&fsm->tuple_by_mask, &t->mask);
+  tuple_free_resources (t);
+  pool_put (fsm->tuples, t);
+}
+
+static_always_inline void
+rule_own_mask (fastacl_main_t *fsm, u32 rule_index, int is_ip6, fastacl_tuple_mask_t *m)
+{
+  mask_from_rule (&pool_elt_at_index (fsm->rules, rule_index)->match, is_ip6, m);
+}
+
+static int
+chain_split_mask (fastacl_main_t *fsm, const fastacl_tuple_t *t, const u32 *rule_indices,
+		  fastacl_tuple_mask_t *target)
+{
+  u8 hi[2] = { 0, 0 };
+  int f, best = -1, best_delta = 0;
+  fastacl_tuple_mask_t m;
+  const u32 *ri;
+
+  vec_foreach (ri, rule_indices)
+    {
+      rule_own_mask (fsm, *ri, t->mask.is_ip6, &m);
+      if (ri == rule_indices)
+	*target = m;
+      if (!(m.flags & FASTACL_MATCH_PROTO))
+	target->flags &= ~FASTACL_MATCH_PROTO;
+      for (f = 0; f < 2; f++)
+	{
+	  u8 plen = mask_field_plen (&m, f);
+
+	  hi[f] = clib_max (hi[f], plen);
+	  if (plen < mask_field_plen (target, f))
+	    mask_field_set (target, f, plen);
+	}
+    }
+
+  for (f = 0; f < 2; f++)
+    if (hi[f] - mask_field_plen (target, f) > best_delta)
+      {
+	best = f;
+	best_delta = hi[f] - mask_field_plen (target, f);
+      }
+
+  if (best < 0)
+    mask_relax (target, 1);
+  else
+    mask_field_set (target, best, hi[best] - best_delta / 2);
+
+  return mask_covers (&t->mask, target) && !mask_eq (&t->mask, target);
+}
+
+static_always_inline u32
+chain_len (fastacl_main_t *fsm, u32 chain_index)
+{
+  return chain_index == ~0u ? 0 :
+			      vec_len (pool_elt_at_index (fsm->chains, chain_index)->rule_indices);
+}
+
+static_always_inline int
+chain_over_threshold (fastacl_main_t *fsm, u32 chain_index)
+{
+  return fsm->tuple_merge && chain_len (fsm, chain_index) > FASTACL_TM_SPLIT_THRESHOLD;
+}
+
+static_always_inline int
+chain_needs_split (fastacl_main_t *fsm, u32 chain_index)
+{
+  return chain_over_threshold (fsm, chain_index) &&
+	 is_pow2 (chain_len (fsm, chain_index) - FASTACL_TM_SPLIT_THRESHOLD);
+}
+
+static u32
+tuple_move_rules (fastacl_main_t *fsm, u32 from, u32 to, const u32 *rule_indices)
+{
+  fastacl_tuple_mask_t target = pool_elt_at_index (fsm->tuples, to)->mask, own;
+  u32 deepest = ~0u;
+  const u32 *ri;
+
+  vec_foreach (ri, rule_indices)
+    {
+      rule_own_mask (fsm, *ri, target.is_ip6, &own);
+      if (!mask_covers (&target, &own))
+	continue;
+      tuple_remove_rule (fsm, from, *ri);
+      u32 chain_index = tuple_add_rule (fsm, to, *ri);
+      if (chain_len (fsm, chain_index) > chain_len (fsm, deepest))
+	deepest = chain_index;
+    }
+  return deepest;
+}
+
+static void
+tuple_split_chain (fastacl_main_t *fsm, u32 tuple_index, u32 chain_index)
+{
+  u32 *moved = vec_dup (pool_elt_at_index (fsm->chains, chain_index)->rule_indices);
+  fastacl_tuple_mask_t target;
+  u32 to, deepest;
+
+  if (chain_split_mask (fsm, pool_elt_at_index (fsm->tuples, tuple_index), moved, &target))
+    {
+      to = tuple_get_or_create (fsm, &target) - fsm->tuples;
+      deepest = tuple_move_rules (fsm, tuple_index, to, moved);
+      if (chain_over_threshold (fsm, deepest))
+	tuple_split_chain (fsm, to, deepest);
+    }
+  vec_free (moved);
+}
+
+static void
+tss_insert_one (fastacl_main_t *fsm, u32 rule_index, int is_ip6)
+{
+  fastacl_tuple_mask_t mask;
+  u32 tuple_index, chain_index;
+
+  mask_from_rule (&pool_elt_at_index (fsm->rules, rule_index)->match, is_ip6, &mask);
+  tuple_index = tuple_select (fsm, &mask);
+  if (tuple_index == ~0u)
+    {
+      if (fsm->tuple_merge)
+	mask_relax (&mask, 0);
+      tuple_index = tuple_get_or_create (fsm, &mask) - fsm->tuples;
+    }
+
+  chain_index = tuple_add_rule (fsm, tuple_index, rule_index);
+  if (chain_needs_split (fsm, chain_index))
+    tuple_split_chain (fsm, tuple_index, chain_index);
 }
 
 void
 fastacl_tss_insert_rule (fastacl_main_t *fsm, u32 rule_index)
 {
   fastacl_rule_t *rule = pool_elt_at_index (fsm->rules, rule_index);
-  fastacl_tuple_mask_t mask;
+  int is_ip6 = rule_family (&rule->match);
+  int agnostic = rule_is_family_agnostic (&rule->match);
 
-  mask_from_rule (&rule->match, &mask);
-  tss_insert_one (fsm, rule_index, &mask);
-
-  if (rule_is_family_agnostic (&rule->match))
-    {
-      mask.is_ip6 = 1;
-      tss_insert_one (fsm, rule_index, &mask);
-    }
-}
-
-static void
-tss_remove_one (fastacl_main_t *fsm, u32 rule_index, const fastacl_tuple_mask_t *mask)
-{
-  uword *p = hash_get_mem (fsm->tuple_by_mask, mask);
-
-  if (!p)
-    return;
-
-  fastacl_tuple_t *t = pool_elt_at_index (fsm->tuples, p[0]);
-
-  if (!tss_bihash_remove (fsm, t, rule_index))
-    return;
-
-  t->n_rules--;
-
-  if (t->n_rules != 0)
-    return;
-
-  fastacl_u32_vec_remove_value (tuple_family_vec (fsm, t->mask.is_ip6), t - fsm->tuples);
-  hash_unset_mem_free (&fsm->tuple_by_mask, &t->mask);
-  tuple_free_resources (t);
-  pool_put (fsm->tuples, t);
+  tss_insert_one (fsm, rule_index, is_ip6);
+  if (agnostic)
+    tss_insert_one (fsm, rule_index, 1);
 }
 
 void
@@ -576,16 +870,18 @@ void
 fastacl_tss_remove_rule (fastacl_main_t *fsm, u32 rule_index)
 {
   fastacl_rule_t *rule = pool_elt_at_index (fsm->rules, rule_index);
-  fastacl_tuple_mask_t mask;
+  u32 v4_tuple = rule->tuple_index[0], v6_tuple = rule->tuple_index[1];
+  int agnostic = rule_is_family_agnostic (&rule->match);
 
-  mask_from_rule (&rule->match, &mask);
-  tss_remove_one (fsm, rule_index, &mask);
+  tuple_remove_rule (fsm, rule_family (&rule->match) ? v6_tuple : v4_tuple, rule_index);
+  if (agnostic)
+    tuple_remove_rule (fsm, v6_tuple, rule_index);
+}
 
-  if (rule_is_family_agnostic (&rule->match))
-    {
-      mask.is_ip6 = 1;
-      tss_remove_one (fsm, rule_index, &mask);
-    }
+static_always_inline int
+tuple_outranked (const fastacl_tuple_t *t, const fastacl_tss_best_t *best)
+{
+  return !fastacl_rule_outranks (&t->bound, t->bound.index, best->rule, best->ri);
 }
 
 static_always_inline int
@@ -668,6 +964,9 @@ fastacl_tss_lookup_ip4 (fastacl_main_t *fsm, ip4_header_t *ip, u8 pkt_proto, u16
       fastacl_tuple_t *t = pool_elt_at_index (fsm->tuples, *ti);
       clib_bihash_kv_24_8_t kv;
       u64 result_value;
+
+      if (tuple_outranked (t, &best))
+	break;
       key_from_packet_ip4 (&t->mask, ip, pkt_proto, &kv);
       if (tss4_search (t, &kv, &result_value) != 0)
 	continue;
@@ -722,6 +1021,9 @@ fastacl_tss_lookup_ip6 (fastacl_main_t *fsm, ip6_header_t *ip6, u8 pkt_proto, u1
       fastacl_tuple_t *t = pool_elt_at_index (fsm->tuples, *ti);
       clib_bihash_kv_40_8_t kv;
       u64 result_value;
+
+      if (tuple_outranked (t, &best))
+	break;
       key_from_packet_ip6 (&t->mask, ip6, pkt_proto, &kv);
       if (tss6_search (t, &kv, &result_value) != 0)
 	continue;

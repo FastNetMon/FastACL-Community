@@ -14,10 +14,9 @@
 
 #define FASTACL_MATCH_ADDR_BITS (FASTACL_MATCH_DST_PREFIX | FASTACL_MATCH_SRC_PREFIX)
 
-#define FASTACL_TSS_MASK_FLAGS_BITS                                                                \
-  (FASTACL_MATCH_DST_PREFIX | FASTACL_MATCH_SRC_PREFIX | FASTACL_MATCH_PROTO |                     \
-   FASTACL_MATCH_DST_PORT | FASTACL_MATCH_SRC_PORT | FASTACL_MATCH_EITHER_PORT |                   \
-   FASTACL_MATCH_IS_IP6)
+#define FASTACL_TM_ADDR_DELTA      4
+#define FASTACL_TM_SPLIT_THRESHOLD  16
+#define FASTACL_TUPLE_MERGE_DEFAULT 1
 
 typedef struct
 {
@@ -87,6 +86,7 @@ typedef struct
   u8 hash_initialized;
   u32 *chain_indices;
   u32 n_rules;
+  fastacl_rule_t bound;
 } fastacl_tuple_t;
 
 typedef union

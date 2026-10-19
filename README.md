@@ -118,6 +118,11 @@ fastacl {
 }
 ```
 
+TupleMerge is on by default with no configuration; `tuple-merge off` in the same
+stanza selects plain Tuple Space Search instead. TupleMerge
+lets rules with nearby prefix lengths share one tuple, so `show fastacl tuples`
+reports far fewer tuples for the same rule set; verdicts are identical.
+
 (`tss-bihash-memory-mb` is still parsed so old configurations start, but it does
 nothing: the classifier's hash tables set `BIHASH_USE_HEAP` and allocate from
 the VPP main heap. Size the main heap instead.)

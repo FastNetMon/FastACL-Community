@@ -45,6 +45,7 @@ struct fastacl_main_t_
   u32 tss_buckets;
   u8 rule_stats_enabled;
   u8 tss_bulk_mode;
+  u8 tuple_merge;
 
   u16 msg_id_base;
 

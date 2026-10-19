@@ -69,6 +69,30 @@ pkt-len, DSCP or fragment bits -- form a chain that a matching packet walks,
 re-checking those fields per member. ``deepest`` is the worst-case walk length
 for that shape, and the number to watch once shape count is under control.
 
+TupleMerge
+~~~~~~~~~~
+
+By default the classifier runs TupleMerge (Daly and Torng, IEEE/ACM ToN 2019)
+on top of the same tuples. A rule joins the most specific existing tuple whose
+mask is no more specific than its own on any field; otherwise it creates a
+relaxed tuple. Relaxing drops the shorter address when the source and
+destination prefix lengths differ by more than 4 bits, then shortens each IPv4
+prefix as VPP's ACL plugin does (/32 to /26, /25-/31 by 5 bits, /17-/24 by 4,
+/9-/16 by 2) and each IPv6 prefix (/128 to /64, /64-/127 to /56). Members of a
+merged tuple are always re-checked against the packet, so verdicts are
+identical to plain Tuple Space Search. A chain longer than 16 is split as the
+ACL plugin splits one: the prefix field whose lengths spread most among the
+chain's rules is set halfway between their shortest and longest, or, when they
+all share one mask, that mask is relaxed by a smaller step (/32 to /29, /25-/31
+by 2, /9-/24 by 1); the rules it covers move to that tuple, and a split that
+would not tighten the tuple is skipped. A chain that stays long is re-examined
+only each time its length past 16 doubles, so inserts stay cheap. Tuples are
+probed in order of the best rule each holds, and the probe stops once the
+current match outranks every remaining tuple.
+
+TupleMerge is on by default and needs no configuration; ``show fastacl tuples``
+reports the mode in use.
+
 Key narrowing
 ~~~~~~~~~~~~~
 
@@ -152,7 +176,7 @@ _____________
       tss-bihash-buckets 65536
     }
 
-``tss-bihash-buckets`` is allocated per rule shape, so raise it for very large
+TupleMerge is the default; ``tuple-merge off`` selects plain Tuple Space Search. ``tss-bihash-buckets`` is allocated per rule shape, so raise it for very large
 rule sets; a million-rule table runs ``1048576``. Values below ``1024`` are
 clamped up.
 
